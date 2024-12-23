@@ -170,36 +170,36 @@ class GenomicRegion:
             * ((self.end - self.start - tile_size) // step_size + 1),
         )
 
-        # def get_hic(self, hic, resolution=25000):
-        #     """
-        #     Get the Hi-C matrix of the genomic regions
-        #     """
-        #     # check if hicstraw is imported
-        #     try:
-        #         import hicstraw
-        #     except ImportError:
-        #         raise ImportError("hicstraw is not installed")
+    # def get_hic(self, hic, resolution=25000):
+    #     """
+    #     Get the Hi-C matrix of the genomic regions
+    #     """
+    #     # check if hicstraw is imported
+    #     try:
+    #         import hicstraw
+    #     except ImportError:
+    #         raise ImportError("hicstraw is not installed")
 
-        start = self.start  # // resolution
-        end = self.end  # // resolution + 1
+    #     start = self.start  # // resolution
+    #     end = self.end  # // resolution + 1
 
-        mzd = hic.getMatrixZoomData(
-            self.chromosome.replace("chr", ""),
-            self.chromosome.replace("chr", ""),
-            "observed",
-            "KR",
-            "BP",
-            resolution,
-        )
-        numpy_matrix = mzd.getRecordsAsMatrix(
-            start,
-            end,
-            start,
-            end,
-            # start * resolution, end * resolution, start * resolution, end * resolution
-        )
-        dst = np.log10(numpy_matrix[1:, 1:] + 1)
-        return dst
+    #     mzd = hic.getMatrixZoomData(
+    #         self.chromosome.replace("chr", ""),
+    #         self.chromosome.replace("chr", ""),
+    #         "observed",
+    #         "KR",
+    #         "BP",
+    #         resolution,
+    #     )
+    #     numpy_matrix = mzd.getRecordsAsMatrix(
+    #         start,
+    #         end,
+    #         start,
+    #         end,
+    #         # start * resolution, end * resolution, start * resolution, end * resolution
+    #     )
+    #     dst = np.log10(numpy_matrix[1:, 1:] + 1)
+    #     return dst
 
 
 class GenomicRegionCollection(PyRanges):
@@ -542,7 +542,7 @@ def read_peaks(
             peak_file, sep="\t", header=None, names=bed_columns[num_columns]
         )
         # check dtype of the fourth column, if quantitative, rename it to score
-        if peaks.iloc[:, 3].dtype in [
+        if len(peaks.columns) == 4 and peaks.iloc[:, 3].dtype in [
             "float64",
             "int64",
             "float32",
