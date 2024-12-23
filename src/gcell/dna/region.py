@@ -555,9 +555,9 @@ def read_peaks(
         raise ValueError("Peak file must be .bed or .narrowPeak format")
 
     # Ensure required columns exist
-    required_columns = return_columns
+    required_columns = return_columns or ["chromosome", "start", "end"]
     if not all(col in peaks.columns for col in required_columns):
-        raise ValueError("Peak file must contain chromosome, start, and end columns")
+        raise ValueError(f"Peak file must contain {required_columns} columns")
 
     if return_collection:
         if genome is None:
