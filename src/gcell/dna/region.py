@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import urllib.request
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -169,15 +170,15 @@ class GenomicRegion:
             * ((self.end - self.start - tile_size) // step_size + 1),
         )
 
-    def get_hic(self, hic, resolution=25000):
-        """
-        Get the Hi-C matrix of the genomic regions
-        """
-        # check if hicstraw is imported
-        try:
-            import hicstraw
-        except ImportError:
-            raise ImportError("hicstraw is not installed")
+        # def get_hic(self, hic, resolution=25000):
+        #     """
+        #     Get the Hi-C matrix of the genomic regions
+        #     """
+        #     # check if hicstraw is imported
+        #     try:
+        #         import hicstraw
+        #     except ImportError:
+        #         raise ImportError("hicstraw is not installed")
 
         start = self.start  # // resolution
         end = self.end  # // resolution + 1
@@ -455,3 +456,127 @@ class GenomicRegionCollection(PyRanges):
         )
 
         return output
+
+
+def read_peaks(
+    peak_file: str,
+    return_collection: bool = False,
+    genome: Genome = None,
+    return_columns: list[str] = None,
+) -> pd.DataFrame | GenomicRegionCollection:
+    """
+    Read peaks from a BED or narrowPeak file. Automatically detects number of columns.
+
+    Args:
+        peak_file: Path to peak file
+        return_collection: If True, returns a GenomicRegionCollection instead of DataFrame
+        genome: Required if return_collection is True, the Genome object for the peaks
+        return_columns: If not None, returns a DataFrame with only the specified columns
+    Returns:
+        DataFrame with peak regions or GenomicRegionCollection if return_collection=True
+
+    Raises:
+        ValueError: If file format is invalid or if genome is not provided when return_collection=True
+    """
+    # Standard column names for different BED formats
+    bed_columns = {
+        3: ["chromosome", "start", "end"],
+        4: ["chromosome", "start", "end", "name"],
+        5: ["chromosome", "start", "end", "name", "score"],
+        6: ["chromosome", "start", "end", "name", "score", "strand"],
+        9: [
+            "chromosome",
+            "start",
+            "end",
+            "name",
+            "score",
+            "strand",
+            "thickStart",
+            "thickEnd",
+            "rgb",
+        ],
+        12: [
+            "chromosome",
+            "start",
+            "end",
+            "name",
+            "score",
+            "strand",
+            "thickStart",
+            "thickEnd",
+            "rgb",
+            "blockCount",
+            "blockSizes",
+            "blockStarts",
+        ],
+    }
+
+    narrowpeak_columns = [
+        "chromosome",
+        "start",
+        "end",
+        "name",
+        "score",
+        "strand",
+        "signalValue",
+        "pValue",
+        "qValue",
+        "summit",
+    ]
+
+    # Read first line to detect number of columns
+    with open(peak_file) as f:
+        first_line = f.readline().strip()
+        num_columns = len(first_line.split("\t"))
+
+    if peak_file.endswith(".narrowPeak"):
+        if num_columns != 10:
+            raise ValueError(
+                f"narrowPeak file should have 10 columns, found {num_columns}"
+            )
+        peaks = pd.read_csv(peak_file, sep="\t", header=None, names=narrowpeak_columns)
+    elif peak_file.endswith(".bed"):
+        if num_columns not in bed_columns:
+            raise ValueError(f"Unsupported BED format with {num_columns} columns")
+        peaks = pd.read_csv(
+            peak_file, sep="\t", header=None, names=bed_columns[num_columns]
+        )
+        # check dtype of the fourth column, if quantitative, rename it to score
+        if peaks.iloc[:, 3].dtype in [
+            "float64",
+            "int64",
+            "float32",
+            "int32",
+            "float16",
+            "int16",
+        ]:
+            peaks.rename(columns={3: "score"}, inplace=True)
+    else:
+        raise ValueError("Peak file must be .bed or .narrowPeak format")
+
+    # Ensure required columns exist
+    required_columns = return_columns
+    if not all(col in peaks.columns for col in required_columns):
+        raise ValueError("Peak file must contain chromosome, start, and end columns")
+
+    if return_collection:
+        if genome is None:
+            raise ValueError("genome parameter is required when return_collection=True")
+
+        # Convert to GenomicRegionCollection format
+        df = peaks.rename(
+            columns={"chromosome": "Chromosome", "start": "Start", "end": "End"}
+        )
+
+        # Add strand column if not present
+        if "strand" in peaks.columns:
+            df = df.rename(columns={"strand": "Strand"})
+        elif "Strand" not in df.columns:
+            df["Strand"] = "+"
+
+        return GenomicRegionCollection(genome=genome, df=df)
+
+    if return_columns is None:
+        return peaks
+    else:
+        return peaks[return_columns]
