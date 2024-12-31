@@ -1,13 +1,8 @@
-from __future__ import annotations
-
 from inspect import get_annotations
-from typing import TYPE_CHECKING
 
 from jinja2.defaults import DEFAULT_NAMESPACE
 from jinja2.utils import import_string
-
-if TYPE_CHECKING:
-    from sphinx.application import Sphinx
+from sphinx.application import Sphinx
 
 
 def has_member(obj_path: str, attr: str) -> bool:

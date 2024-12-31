@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import logging
 from concurrent.futures import ProcessPoolExecutor
 from io import BytesIO
@@ -20,6 +18,7 @@ from tqdm import tqdm
 
 from .._logging import get_logger
 from ..dna.nr_motif_v1 import NrMotifV1
+from ..rna.gencode import Gencode
 from ..rna.gene import TSS
 from ..utils.causal_lib import get_subnet, plotly_networkx_digraph, preprocess_net
 from ..utils.lingam import LiNGAM
@@ -31,14 +30,12 @@ from ..utils.s3 import (
 )
 
 motif = NrMotifV1.load_from_pickle(
-    pkg_resources.resource_filename("caesar", "data/NrMotifV1.pkl")
+    pkg_resources.resource_filename("gcell", "data/NrMotifV1.pkl")
 )
 motif_clusters = motif.cluster_names
 
 # Load gencode_hg38 from feather file
-gencode_hg38 = pd.read_feather(
-    pkg_resources.resource_filename("caesar", "data/gencode.v40.hg38.feather")
-)
+gencode_hg38 = Gencode("hg38", version=44).gtf
 gencode_hg38["Strand"] = gencode_hg38["Strand"].apply(lambda x: 0 if x == "+" else 1)
 gene2strand = gencode_hg38.set_index("gene_name").Strand.to_dict()
 
@@ -73,6 +70,7 @@ class Celltype:
         self.obs = None
         self._zarr_data = None
         self.celltype_name = celltype
+        self.celltype = celltype
         self.data_dir = data_dir
         self.interpret_dir = interpret_dir
         self.assets_dir = assets_dir
@@ -83,6 +81,7 @@ class Celltype:
         self.num_cls = num_cls
         self.s3_file_sys = s3_file_sys
         self.interpret_cell_dir = Path(self.interpret_dir) / celltype / "allgenes"
+        print("loading from interpretation dir", self.interpret_cell_dir)
         self.gene_feather_path = f"{self.data_dir}{celltype}.exp.feather"
         if path_exists_with_s3(
             self.interpret_cell_dir / f"{self.celltype}.zarr",
@@ -125,7 +124,7 @@ class Celltype:
             )
             self.tss_accessibility = self.input[:, self.num_features - 1]
         self.gene_annot["Strand"] = self.gene_annot["gene_name"].apply(
-            lambda x: gene2strand[x]
+            lambda x: gene2strand.get(x, 0)
         )
         self.tss_strand = self.gene_annot.Strand.astype(int).values
         self.tss_start = self.peak_annot.iloc[tss_idx].Start.values
@@ -672,7 +671,7 @@ class Celltype:
                     file_path=f'{self.assets_dir}{m_i.replace("/", "_")}.png',
                     s3_file_sys=self.s3_file_sys,
                 )
-                or overwrite == True
+                or overwrite
             ):
                 motif.get_motif_cluster_by_name(m_i).seed_motif.plot_logo(
                     filename=f'{self.assets_dir}{m_i.replace("/", "_")}.png',
@@ -697,7 +696,7 @@ class Celltype:
                 ax[i // 5][i % 5].set_title(
                     f"{m_i}:{self.get_highest_exp_genes(motif_cluster_genes)}"
                 )
-            except:
+            except Exception as e:
                 ax[i // 5][i % 5].set_title(f"{m_i}")
 
         return fig, ax
@@ -944,19 +943,18 @@ class Celltype:
 
 
 class GETCellType(Celltype):
-    def __init__(self, celltype, config):
+    def __init__(self, celltype, config, s3_file_sys=None):
         features = config.celltype.features
         if features == "NrMotifV1":
             features = np.array(motif_clusters + ["Accessibility"])
         num_region_per_sample = config.celltype.num_region_per_sample
         data_dir = config.celltype.data_dir
         interpret_dir = config.celltype.interpret_dir
-        assets_dir = config.assets_dir
+        assets_dir = config.celltype.assets_dir
         input = config.celltype.input
         jacob = config.celltype.jacob
         embed = config.celltype.embed
         num_cls = config.celltype.num_cls
-        s3_file_sys = config.s3_file_sys
         super().__init__(
             features,
             num_region_per_sample,
@@ -1115,7 +1113,7 @@ class GETHydraCellType(Celltype):
         if zarr_path is None:
             zarr_path = f"{cfg.machine.output_dir}/{cfg.run.project_name}/{cfg.run.run_name}/{cfg.run.run_name}.zarr"
         if motif_path is None:
-            motif_path = pkg_resources.resource_filename("caesar", "data/NrMotifV1.pkl")
+            motif_path = pkg_resources.resource_filename("gcell", "data/NrMotifV1.pkl")
         return cls(celltype=celltype, zarr_path=zarr_path, motif_path=motif_path)
 
     def get_gene_by_motif(self, overwrite: bool = False):
@@ -1209,7 +1207,7 @@ class GETHydraCellType(Celltype):
                     ax[i // 5][i % 5].set_title(
                         f"{m_i}:{self.get_highest_exp_genes(motif_cluster_genes)}"
                     )
-                except:
+                except Exception as e:
                     ax[i // 5][i % 5].set_title(f"{m_i}")
             else:
                 ax[i // 5][i % 5].set_title(f"{m_i}")

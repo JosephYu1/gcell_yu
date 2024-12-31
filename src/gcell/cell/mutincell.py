@@ -1,27 +1,22 @@
-from __future__ import annotations
-
 import concurrent.futures
 import contextlib
 import re
 import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 import pkg_resources
+from omegaconf import DictConfig
 from pyranges import PyRanges as pr
 
 from .._logging import get_logger
 from ..cell.celltype import GETCellType, GETHydraCellType
 from ..config.config import load_config
+from ..dna.genome import Genome, GenomicRegionCollection
 from ..dna.mutation import Mutations, read_rsid_parallel
 from ..dna.nr_motif_v1 import NrMotifV1
-from ..dna.region import Genome, GenomicRegionCollection
 from ..dna.sequence import DNASequence, DNASequenceCollection
-
-if TYPE_CHECKING:
-    from omegaconf import DictConfig
 
 logger = get_logger(__name__)
 
@@ -109,7 +104,7 @@ class CellMutCollection:
         self.get_config.celltype.num_cls = 2
         self.get_config.celltype.input = True
         self.get_config.celltype.embed = False
-        self.get_config.assets_dir = ""
+        self.get_config.celltype.assets_dir = ""
         self.get_config.s3_file_sys = ""
         self.get_config.celltype.data_dir = "/manitou/pmg/users/xf2217/pretrain_human_bingren_shendure_apr2023/fetal_adult/"
         self.get_config.celltype.interpret_dir = (

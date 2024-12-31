@@ -1,16 +1,16 @@
-from __future__ import annotations
-
-import os
 import re
+from pathlib import Path
 
-import gprofiler as gp
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from gprofiler import GProfiler
 from matplotlib import pyplot as plt
 from scipy.stats import fisher_exact, hypergeom
 
 from ..rna.gencode import Gencode
+
+gp = GProfiler(return_dataframe=True)
 
 
 def read_gmt_file(gmt_file):
@@ -18,7 +18,7 @@ def read_gmt_file(gmt_file):
     Read gmt file and return a dataframe with pathway id as index and gene set as value.
     """
     pathway_dict = {}
-    with open(gmt_file) as f:
+    with Path(gmt_file).open() as f:
         for line in f:
             line = line.strip().split("\t")
             pathway_dict[line[0]] = (line[0].split(":")[0], line[1], line[2:])
@@ -53,13 +53,13 @@ class Pathways:
 
         Parameters
         ----------
-        gmt_file : str
+        gmt_file : str or Path
             Path to the gmt file.
         assembly : str, optional
             The genome assembly version.
         gencode_version : str, optional
             The Gencode version.
-        annotation_dir : str, optional
+        annotation_dir : str or Path, optional
             Directory containing the annotation files.
         config : Config, optional
             A configuration object. If provided, it overrides the other parameters.
@@ -67,10 +67,10 @@ class Pathways:
         if config:
             assembly = config.get("assembly")
             gencode_version = config.get("gencode_version")
-            annotation_dir = config.get("annotation_dir")
+            annotation_dir = Path(config.get("annotation_dir"))
             gmt_file = config.get("pathway_file")
-            gmt_file = os.path.join(annotation_dir, gmt_file)
-            if not os.path.exists(gmt_file):
+            gmt_file = annotation_dir / gmt_file
+            if not gmt_file.exists():
                 raise FileNotFoundError(f"Pathway file not found at {gmt_file}")
 
         self.gencode = Gencode(

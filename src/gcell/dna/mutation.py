@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import concurrent.futures
 import random
 import subprocess
@@ -12,7 +10,7 @@ import requests
 from tqdm import tqdm
 
 from .._logging import get_logger
-from .region import GenomicRegionCollection
+from .genome import GenomicRegionCollection
 from .sequence import DNASequence, DNASequenceCollection
 
 logger = get_logger(__name__)
@@ -170,8 +168,9 @@ def read_rsid_parallel(genome, rsid_list, num_workers=10):
             try:
                 df.append(future.result())
                 processed_rsids.append(future_to_rsid[future])
-            except:
+            except Exception as e:
                 failed_rsids.append(future_to_rsid[future])
+                logger.error(f"Error processing {future_to_rsid[future]}: {e}")
 
     if len(df) > 0:
         df = (

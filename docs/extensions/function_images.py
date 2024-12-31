@@ -1,15 +1,10 @@
 """Images for plot functions"""
 
-from __future__ import annotations
-
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any
 
-if TYPE_CHECKING:
-    from typing import Any
-
-    from sphinx.application import Sphinx
-    from sphinx.ext.autodoc import Options
+from sphinx.application import Sphinx
+from sphinx.ext.autodoc import Options
 
 
 def insert_function_images(  # noqa: PLR0917

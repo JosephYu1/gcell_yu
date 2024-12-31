@@ -1,16 +1,7 @@
-from __future__ import annotations
-
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-
-try:
-    pass
-except:
-    print(
-        "MOODS not installed. Please install MOODS to use the reverse_complement function."
-    )
 
 from .motif import MotifClusterCollection
 

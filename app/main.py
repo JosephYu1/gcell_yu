@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import argparse
 from pathlib import Path
 
@@ -13,42 +11,36 @@ from dash_bio import Clustergram
 from gcell.cell.celltype import GETCellType
 from gcell.config.config import load_config
 from gcell.dna.nr_motif_v1 import NrMotifV1
-from gcell.protein.af2 import GETAFPairseg
-from gcell.protein.protein import get_genename_to_uniprot, get_lddt, get_seq
+from gcell.protein.af2 import AFPairseg
 from gcell.utils.pdb_viewer import view_pdb_html
-
-seq = get_seq()
-genename_to_uniprot = get_genename_to_uniprot()
-lddt = get_lddt()
 
 args = argparse.ArgumentParser()
 args.add_argument("-p", "--port", type=int, default=7860, help="Port number")
 args.add_argument("-s", "--share", action="store_true", help="Share on network")
 args.add_argument(
-    "-u", "--s3_uri", type=str, default=None, help="Path to demo S3 bucket"
+    "-u",
+    "--s3_uri",
+    type=str,
+    default="s3://2023-get-xf2217/get_demo",
+    help="Path to demo S3 bucket",
 )
 args.add_argument("-d", "--data", type=str, default=None, help="Data directory")
 args.add_argument("-n", "--host", type=str, default="127.0.0.1")
 args = args.parse_args()
 
-GET_CONFIG = load_config("src/gcell/config/interpret.yaml")
-GET_CONFIG.celltype.jacob = True
-GET_CONFIG.celltype.num_cls = 2
-GET_CONFIG.celltype.input = True
-GET_CONFIG.celltype.embed = True
+GET_CONFIG = load_config("s3_interpret", "../config/")
 plt.rcParams["figure.dpi"] = 100
 
 if args.s3_uri:  # Use S3 path if exists
     s3_file_sys = s3fs.S3FileSystem(anon=True)
-    GET_CONFIG.s3_file_sys = s3_file_sys
     GET_CONFIG.celltype.data_dir = (
         f"{args.s3_uri}/pretrain_human_bingren_shendure_apr2023/fetal_adult/"
     )
     GET_CONFIG.celltype.interpret_dir = (
         f"{args.s3_uri}/Interpretation_all_hg38_allembed_v4_natac/"
     )
-    GET_CONFIG.motif_dir = f"{args.s3_uri}/interpret_natac/motif-clustering/"
-    GET_CONFIG.assets_dir = f"{args.s3_uri}/assets/"
+    GET_CONFIG.celltype.motif_dir = f"{args.s3_uri}/interpret_natac/motif-clustering/"
+    GET_CONFIG.celltype.assets_dir = f"{args.s3_uri}/assets/"
     cell_type_annot = pd.read_csv(
         GET_CONFIG.celltype.data_dir.split("fetal_adult")[0]
         + "data/cell_type_pretrain_human_bingren_shendure_apr2023.txt"
@@ -64,21 +56,19 @@ if args.s3_uri:  # Use S3 path if exists
     gene_pairs = s3_file_sys.glob(f"{args.s3_uri}/structures/causal/*")
     gene_pairs = [Path(pair).name for pair in gene_pairs]
     motif = NrMotifV1.load_from_pickle(
-        pkg_resources.resource_filename(
-            "atac_rna_data_processing", "data/NrMotifV1.pkl"
-        ),
-        GET_CONFIG.motif_dir,
+        pkg_resources.resource_filename("gcell", "data/NrMotifV1.pkl"),
+        GET_CONFIG.celltype.motif_dir,
     )
-else:  # Run with local data
-    GET_CONFIG.s3_file_sys = None
+else:  # Run with local data (deprecated, to updated to hydra-based config)
+    s3_file_sys = None
     GET_CONFIG.celltype.data_dir = (
         f"{args.data}/pretrain_human_bingren_shendure_apr2023/fetal_adult/"
     )
     GET_CONFIG.celltype.interpret_dir = (
         f"{args.data}/Interpretation_all_hg38_allembed_v4_natac/"
     )
-    GET_CONFIG.motif_dir = f"{args.data}/interpret_natac/motif-clustering/"
-    GET_CONFIG.assets_dir = f"{args.data}/assets/"
+    GET_CONFIG.celltype.motif_dir = f"{args.data}/interpret_natac/motif-clustering/"
+    GET_CONFIG.celltype.assets_dir = f"{args.data}/assets/"
     cell_type_annot = pd.read_csv(
         GET_CONFIG.celltype.data_dir.split("fetal_adult")[0]
         + "data/cell_type_pretrain_human_bingren_shendure_apr2023.txt"
@@ -93,10 +83,8 @@ else:  # Run with local data
     )
     gene_pairs = [f.name for f in Path(f"{args.data}/structures/causal/").glob("*")]
     motif = NrMotifV1.load_from_pickle(
-        pkg_resources.resource_filename(
-            "atac_rna_data_processing", "data/NrMotifV1.pkl"
-        ),
-        GET_CONFIG.motif_dir,
+        pkg_resources.resource_filename("gcell", "data/NrMotifV1.pkl"),
+        GET_CONFIG.celltype.motif_dir,
     )
 
 
@@ -111,7 +99,7 @@ def visualize_AF2(tf_pair, a):
         if not Path(strcture_dir).exists():
             gr.ErrorText("No such gene pair")
 
-    a = GETAFPairseg(strcture_dir, fasta_dir, GET_CONFIG)
+    a = AFPairseg(strcture_dir, fasta_dir, s3_file_sys=s3_file_sys)
     # segpair.choices = list(a.pairs_data.keys())
     fig1 = a.plotly_plddt_gene1()
     fig2 = a.plotly_plddt_gene2()
@@ -134,31 +122,31 @@ def view_pdb(seg_pair, a):
         """
     else:  # No download link if running locally
         output_text = ""
-    return view_pdb_html(pdb_path, s3_file_sys=GET_CONFIG.s3_file_sys), a, output_text
+    return view_pdb_html(pdb_path, s3_file_sys=s3_file_sys), a, output_text
 
 
 def update_dropdown(x, label):
-    return gr.Dropdown.update(choices=x, label=label)
+    return gr.Dropdown(choices=x, label=label, interactive=True)
 
 
-def load_and_plot_celltype(celltype_name, GET_CONFIG, cell):
+def load_and_plot_celltype(celltype_name, GET_CONFIG, cell, s3_file_sys=s3_file_sys):
     celltype_id = cell_type_name_to_id[celltype_name]
-    cell = GETCellType(celltype_id, GET_CONFIG)
+    cell = GETCellType(celltype_id, GET_CONFIG, s3_file_sys=s3_file_sys)
     cell.celltype_name = celltype_name
     gene_exp_fig = cell.plotly_gene_exp()
     return gene_exp_fig, cell
 
 
-def plot_gene_regions(cell, gene_name, *, plotly: bool = True):
+def plot_gene_regions(cell, gene_name, plotly: bool = True):
     return cell.plot_gene_regions(gene_name, plotly=plotly), cell
 
 
-def plot_gene_motifs(cell, gene_name, motif, *, overwrite: bool = False):
+def plot_gene_motifs(cell, gene_name, motif, overwrite: bool = False):
     return cell.plot_gene_motifs(gene_name, motif, overwrite=overwrite)[0], cell
 
 
 def plot_motif_subnet(
-    cell, motif_collection, m, *, type: str = "neighbors", threshold: float = 0.1
+    cell, motif_collection, m, type: str = "neighbors", threshold: float = 0.1
 ):
     return (
         cell.plotly_motif_subnet(motif_collection, m, type=type, threshold=threshold),
@@ -166,7 +154,7 @@ def plot_motif_subnet(
     )
 
 
-def plot_gene_exp(cell, *, plotly: bool = True):
+def plot_gene_exp(cell, plotly: bool = True):
     return cell.plotly_gene_exp(plotly=plotly), cell
 
 
@@ -194,24 +182,6 @@ if __name__ == "__main__":
 
         gr.Markdown(
             """# 🌟 GET: A Foundation Model of Transcription Across Human Cell Types 🌟
-
-Here we introduce GET, an innovative computational model aimed at understanding transcriptional regulation across 213 human fetal and adult cell types.
-Built solely on chromatin accessibility and sequence data, GET exhibits unparalleled generalizability and accuracy in predicting gene expression, even in previously unstudied cell types.
-The model adapts seamlessly across various sequencing platforms and assays, allowing inference of broad-spectrum regulatory activity.
-We validate GET's efficacy through its superior prediction of lentivirus-based massive parallel reporter assay outcomes and its ability to identify previously elusive distant regulatory regions in fetal erythroblasts.
-Moreover, our model reveals both universal and cell type-specific transcription factor interaction networks.
-Utilizing this comprehensive catalog, we elucidate the functional significance of a previously unidentified germline coding variant in PAX5, a lymphoma-associated transcription factor.
-Overall, GET serves as a robust, generalizable framework for understanding cell type-specific gene regulation and transcription factor interactions.
-
-Dive deep into our live demo and experience a revolution in cellular transcription like never before. Here's what you can explore:
-
-- 🔍 Prediction Performance: Choose your cell type and be amazed as we unveil a vivid plot comparing observed versus forecasted gene expression levels.
-- 🧬 Cell-type Specific Regulatory Insights: Just pick a gene, and voilà! Revel in intricate plots revealing the cell-type specific regulatory landscapes and motifs.
-- 🔗 Motif Correlation & Causal Subnetworks: Engage with our intuitive heatmap to witness motif correlations. Go further - choose a motif, define your subnetwork preference, set an effect size threshold, and behold the magic unfold!
-- 🔬 Structural Atlas of Interactions: Step into the realm of transcription factor pairs. Experience heatmaps, pLDDT metrics, and more. And guess what? You can even download the PDB file for select segment pairs!
-
-Stay tuned! We're set to dazzle you further as we launch our demo on Huggingface this week. Questions, thoughts, or moments of awe? Don't hesitate to reach out!
-
         """
         )
 

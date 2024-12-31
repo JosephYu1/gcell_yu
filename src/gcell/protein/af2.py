@@ -1,8 +1,6 @@
-from __future__ import annotations
-
 import json
-import os
 from collections import defaultdict
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,12 +9,9 @@ import plotly.express as px
 import seaborn as sns
 from Bio import SeqIO
 
-from ..utils.s3 import *
-from .data import get_genename_to_uniprot, get_lddt, get_seq
-
-seq = get_seq()
-genename_to_uniprot = get_genename_to_uniprot()
-lddt = get_lddt()
+from ..protein.data import get_seq_from_gene_name
+from ..utils.s3 import glob_with_s3, open_file_with_s3, path_exists_with_s3
+from ._math import min_max
 from .protein import Protein
 
 
@@ -191,7 +186,7 @@ class AFScore:
     def __init__(self, chain_len, js_file, s3_file_sys=None) -> None:
         with open_file_with_s3(js_file, s3_file_sys=s3_file_sys) as f:
             score = json.load(f)
-        js_file = os.path.basename(js_file)
+        js_file = Path(js_file).name
         self.name = js_file.split("scores")[0]
         self.model_type = js_file.split("rank_")[1][4:].split("_model")[0]
         self.model_num = int(
@@ -238,14 +233,10 @@ class AFResult:
         self.config = self._parse_config()
         self.pae = self._parse_pae()
         self.pdb = ""
-        self.pdbs = os.path.join(
-            self.dir,
-            self.name
-            + "_unrelaxed_rank_*_{model_type}_model_*.pdb".format(
-                model_type=self.config["model_type"]
-            ),
+        self.pdbs = str(
+            Path(self.dir)
+            / f"{self.name}_unrelaxed_rank_*_{self.config['model_type']}_model_*.pdb"
         )
-        self.pdb = sorted(glob_with_s3(self.pdbs, s3_file_sys=self.s3_file_sys))[0]
         pdockq_max = 0
         ppv_max = 0
         for f in sorted(glob_with_s3(self.pdbs, s3_file_sys=self.s3_file_sys)):
@@ -280,7 +271,7 @@ class AFResult:
         # self.chain_len = [len(c) for c in self.chains]
 
     def _parse_fasta(self):
-        basename = os.path.basename(self.dir)
+        gene_name = Path(self.dir).name
         if path_exists_with_s3(self.fasta_path, s3_file_sys=self.s3_file_sys):
             if self.s3_file_sys:
                 with self.s3_file_sys.open(self.fasta_path, "r") as f:
@@ -288,20 +279,20 @@ class AFResult:
             else:
                 fasta = SeqIO.read(self.fasta_path, "fasta")
         else:
-            gene_seq = seq[genename_to_uniprot[basename]]
-            fasta = SeqIO.SeqRecord(seq=gene_seq + ":" + gene_seq, id=basename)
+            gene_seq = get_seq_from_gene_name(gene_name)
+            fasta = SeqIO.SeqRecord(seq=gene_seq + ":" + gene_seq, id=gene_name)
         return fasta
 
     def _parse_config(self):
         with open_file_with_s3(
-            os.path.join(self.dir, "config.json"), s3_file_sys=self.s3_file_sys
+            Path(self.dir) / "config.json", s3_file_sys=self.s3_file_sys
         ) as f:
             config = json.load(f)
         return config
 
     def _parse_pae(self):
         with open_file_with_s3(
-            os.path.join(self.dir, self.name + "_predicted_aligned_error_v1.json"),
+            Path(self.dir) / f"{self.name}_predicted_aligned_error_v1.json",
             s3_file_sys=self.s3_file_sys,
         ) as f:
             pae = json.load(f)
@@ -309,12 +300,9 @@ class AFResult:
 
     def _parse_scores(self):
         scores = []
-        file_pattern = os.path.join(
-            self.dir,
-            self.name
-            + "_scores_rank_*_{model_type}_model_*.json".format(
-                model_type=self.config["model_type"]
-            ),
+        file_pattern = str(
+            Path(self.dir)
+            / f"{self.name}_scores_rank_*_{self.config['model_type']}_model_*.json"
         )
         for js_file in sorted(glob_with_s3(file_pattern, s3_file_sys=self.s3_file_sys)):
             scores.append(
@@ -342,20 +330,6 @@ class AFMultimer(AFResult):
     """An AFResult class for AF2 Multimer prediction"""
 
 
-def min_max(arr):
-    """normalize an array to 0-1"""
-    if isinstance(arr, np.ndarray):
-        return (arr - arr.min()) / (arr.max() - arr.min())
-    elif isinstance(arr, list):
-        return [(a - min(arr)) / (max(arr) - min(arr)) for a in arr]
-    elif isinstance(arr, pd.DataFrame):
-        arr_copy = arr.copy()
-        arr_copy["plddt"] = (arr_copy["plddt"] - arr_copy["plddt"].min()) / (
-            arr_copy["plddt"].max() - arr_copy["plddt"].min()
-        )
-        return arr_copy
-
-
 class AFPairseg:
     """
     Pass the base result directory name Gene1_Gene2. In the directory there are many subfolders like Gene1_1_Gene2_2.
@@ -367,7 +341,7 @@ class AFPairseg:
         self.results_root_dir = results_root_dir
         self.fasta_root_dir = fasta_root_dir
         self.s3_file_sys = s3_file_sys
-        self.name = os.path.basename(results_root_dir)
+        self.name = Path(results_root_dir).name
         self.gene1 = self.name.split("_")[0]
         self.gene2 = self.name.split("_")[1]
         self.protein1 = Protein(self.gene1)
@@ -394,15 +368,15 @@ class AFPairseg:
         )
 
         for pair_dir in glob_with_s3(
-            os.path.join(self.results_root_dir, "*"), s3_file_sys=self.s3_file_sys
+            str(Path(self.results_root_dir) / "*"), s3_file_sys=self.s3_file_sys
         ):
-            pair_name = os.path.basename(pair_dir)
+            pair_name = Path(pair_dir).name
             seg1 = int(pair_name.split("_")[1])
             seg2 = int(pair_name.split("_")[3])
             range1 = self.protein1.low_or_high_plddt_region[seg1]
             range2 = self.protein2.low_or_high_plddt_region[seg2]
-            pair_fasta = os.path.join(self.fasta_root_dir, pair_name + ".fasta")
-            res = AFResult(pair_dir, pair_fasta, self.s3_file_sys)
+            pair_fasta = Path(self.fasta_root_dir) / f"{pair_name}.fasta"
+            res = AFResult(pair_dir, str(pair_fasta), self.s3_file_sys)
             pairs[pair_name] = res
             score["mean_plddt"][seg1, seg2] = res.mean_plddt
             score["max_pae"][seg1, seg2] = res.max_pae
@@ -605,11 +579,3 @@ class AFPairseg:
             ax.set(xlabel=f"{self.gene2}", ylabel=f"{self.gene1}")
         plt.tight_layout()
         return fig, axs
-
-
-class GETAFPairseg(AFPairseg):
-    def __init__(self, results_root_dir, fasta_root_dir, config):
-        self.results_root_dir = results_root_dir
-        self.fasta_root_dir = fasta_root_dir
-        s3_file_sys = config.s3_file_sys
-        super().__init__(results_root_dir, fasta_root_dir, s3_file_sys)

@@ -3,16 +3,11 @@
 # dependencies = [ "towncrier", "packaging" ]
 # ///
 
-from __future__ import annotations
-
 import argparse
 import subprocess
-from typing import TYPE_CHECKING
+from collections.abc import Sequence
 
 from packaging.version import Version
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
 
 
 class Args(argparse.Namespace):

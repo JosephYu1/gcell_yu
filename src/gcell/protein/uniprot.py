@@ -1,6 +1,3 @@
-# %%
-from __future__ import annotations
-
 from pathlib import Path
 
 import pandas as pd
@@ -64,7 +61,9 @@ class UniProtAPI:
             return Seq(sequence)
         return None
 
-    def get_domains(self, uniprot_id: str, xml_dir: str | None = None) -> pd.DataFrame:
+    def get_domains(
+        self, uniprot_id: str, xml_dir: str | Path | None = None
+    ) -> pd.DataFrame:
         """
         Get domain information from UniProt.
 
@@ -75,12 +74,19 @@ class UniProtAPI:
         Returns:
             DataFrame containing domain information
         """
-        from .data import get_schema  # Import here to avoid circular imports
+        from .data import _get_schema  # Import here to avoid circular imports
 
-        schema = get_schema()
+        schema = _get_schema()
 
         if xml_dir is not None:
-            url = f"{xml_dir}/{uniprot_id}.xml"
+            xml_dir = Path(xml_dir)
+            xml_file = xml_dir / f"{uniprot_id}.xml"
+            if not xml_file.exists():
+                url = f"https://www.uniprot.org/uniprot/{uniprot_id}.xml"
+                response = requests.get(url)
+                response.raise_for_status()
+                xml_file.write_bytes(response.content)
+            url = str(xml_file)
         else:
             url = f"https://www.uniprot.org/uniprot/{uniprot_id}.xml"
 
@@ -138,7 +144,7 @@ class UniProtAPI:
         output_dir: str | Path,
         organism: str = "Homo sapiens",
         reviewed: bool = True,
-    ) -> str:
+    ) -> Path:
         """
         Download UniProt database for a specific organism.
 
@@ -168,11 +174,9 @@ class UniProtAPI:
         response = requests.get(self.fetch_url, params=params, stream=True)
         response.raise_for_status()
 
-        with open(output_file, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
+        output_file.write_bytes(response.content)
 
-        return str(output_file)
+        return output_file
 
     def search_proteins(self, query: str, fields: list[str] = None) -> pd.DataFrame:
         """
@@ -204,14 +208,3 @@ class UniProtAPI:
         # Create DataFrame from TSV response
         df = pd.read_csv(pd.StringIO(response.text), sep="\t")
         return df
-
-
-# %%
-uniprot = UniProtAPI()
-# %%
-uid = uniprot.get_uniprot_id("PTPN11", "Homo sapiens", reviewed=True)[0]
-# %%
-uniprot.get_protein_sequence(uid)
-# %%
-uniprot.get_domains(uid)
-# %%

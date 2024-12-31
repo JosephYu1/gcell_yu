@@ -1,7 +1,3 @@
-# %%
-# use nglview to visualize the structure
-from __future__ import annotations
-
 import nglview as nv
 import py3Dmol
 

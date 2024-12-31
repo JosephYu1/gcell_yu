@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import numpy as np
 import pandas as pd
 import seqlogo
@@ -8,7 +6,7 @@ try:
     from MOODS.parsers import pfm_to_log_odds
     from MOODS.scan import Scanner
     from MOODS.tools import threshold_from_p_with_precision
-except:
+except ImportError:
     print("MOODS not installed. Please install MOODS to use the scan_motif function.")
 
 
@@ -37,7 +35,7 @@ def print_results(header, seq, matrices, matrix_names, results):
     output = []
     for matrix, matrix_name, result in zip(matrices, matrix_names, mixed_results):
         # determine the length of the matrix
-        l = len(matrix[0]) if len(matrix) == 4 else len(matrix[0]) + 1
+        matrix_length = len(matrix[0]) if len(matrix) == 4 else len(matrix[0]) + 1
 
         # sort the results by position
         sorted_results = sorted(result, key=lambda r: r[0])
@@ -46,7 +44,7 @@ def print_results(header, seq, matrices, matrix_names, results):
         for r in sorted_results:
             strand = r[2]
             pos = r[0]
-            hitseq = seq[pos : pos + l]
+            hitseq = seq[pos : pos + matrix_length]
             output.append([header, matrix_name, pos, strand, r[1], hitseq])
     return output
 

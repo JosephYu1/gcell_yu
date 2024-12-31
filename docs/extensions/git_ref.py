@@ -1,15 +1,11 @@
 """Extension to inject ``html_theme_options["repository_branch"]``."""
 
-from __future__ import annotations
-
 import re
 import subprocess
 from functools import lru_cache
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from sphinx.application import Sphinx
-    from sphinx.config import Config
+from sphinx.application import Sphinx
+from sphinx.config import Config
 
 
 def git(*args: str) -> str:

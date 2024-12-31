@@ -1,14 +1,9 @@
 # Just do the following to see the rst of a function:
 # rm ./_build/doctrees/api/generated/gcell.<what you want>.doctree; DEBUG=1 make html
-from __future__ import annotations
-
 import os
-from typing import TYPE_CHECKING
 
 import sphinx.ext.napoleon
-
-if TYPE_CHECKING:
-    from sphinx.application import Sphinx
+from sphinx.application import Sphinx
 
 _pd_orig = sphinx.ext.napoleon._process_docstring
 

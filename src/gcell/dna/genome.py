@@ -1,36 +1,407 @@
-from __future__ import annotations
+"""
+Genome module for handling genomic sequences and regions.
 
-import urllib.request
-from typing import Union
+This module provides classes and functions for working with genomic sequences,
+regions, and annotations. It includes functionality for downloading genome files,
+accessing sequences, and manipulating genomic regions.
+
+Classes:
+    ChromSize: Handles chromosome size information
+    ChromGap: Handles chromosome gap information
+    Genome: Main class for genome sequence access and manipulation
+    GenomicRegion: Represents a single genomic region
+    GenomicRegionCollection: Collection of genomic regions with operations
+
+Functions:
+    read_peaks: Read peak files in BED or narrowPeak format
+    read_blacklist: Read ENCODE blacklist regions
+    pandas_to_tabix_region: Convert pandas DataFrame to tabix region string
+"""
+
+import gzip
+from io import StringIO
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pooch
+import requests
 from pandas.api.types import CategoricalDtype
 from pyfaidx import Fasta
 from pyranges import PyRanges
 from scipy.sparse import csr_matrix
 
+from .. import _settings
 from .motif import print_results
 from .sequence import DNASequence, DNASequenceCollection
 
 
-class Genome:
-    def __init__(self, assembly: str, fasta_file: str) -> None:
-        self.fasta_file = fasta_file
+class ChromSize:
+    """
+    Class for handling chromosome size information.
+
+    Downloads and parses chromosome size files from UCSC genome browser.
+    Provides methods to access and manipulate chromosome size data.
+
+    Parameters
+    ----------
+    assembly : str
+        Genome assembly name (e.g. 'hg38', 'mm10')
+    annotation_dir : str or Path, optional
+        Directory to store annotation files
+
+    Attributes
+    ----------
+    assembly : str
+        Genome assembly name
+    annotation_dir : Path
+        Directory containing annotation files
+    chrom_sizes : dict
+        Dictionary mapping chromosome names to sizes
+
+    Methods
+    -------
+    get_dict(chr_included=None)
+        Get chromosome sizes as dictionary
+    save_chrom_sizes()
+        Save chromosome sizes to file
+    as_pyranges()
+        Convert to PyRanges format
+    tiling_region(tile_size, tile_overlap=0)
+        Create tiled regions across chromosomes
+    """
+
+    def __init__(self, assembly=None, annotation_dir=None):
         self.assembly = assembly
-        self.genome_seq = Fasta(fasta_file)
-        url = f"http://hgdownload.cse.ucsc.edu/goldenPath/{assembly}/bigZips/{assembly}.chrom.sizes"
-        # Download the hg38 chromosome sizes file
-        response = urllib.request.urlopen(url)
+        self.annotation_dir = Path(annotation_dir) if annotation_dir else None
+        if self.assembly is None:
+            raise ValueError("assembly is not specified")
+        if self.annotation_dir is None:
+            raise ValueError("annotation_dir is not specified")
+
+        self.chrom_sizes = self.parse_or_download_chrom_sizes()
+
+    def _download_chrom_sizes(self):
+        url = f"http://hgdownload.soe.ucsc.edu/goldenPath/{self.assembly}/bigZips/{self.assembly}.chrom.sizes"
+        response = requests.get(url)
+        if response.status_code != 200:
+            raise ConnectionError("Failed to download chromosome data")
+        return self._parse_chrom_data(response.text)
+
+    def _parse_chrom_data(self, data):
         chrom_sizes = {}
-        for line in response:
-            chrom, size = line.strip().split(b"\t")
-            chrom_sizes[chrom.decode()] = int(size)
-        self.chrom_sizes = chrom_sizes
+        lines = data.strip().split("\n")
+        for line in lines:
+            parts = line.split("\t")
+            if len(parts) == 2:
+                chrom, length = parts
+                chrom_sizes[chrom] = int(length)
+        return chrom_sizes
+
+    def get_dict(self, chr_included=None):
+        if chr_included is None:
+            return self.chrom_sizes
+        else:
+            return {chr: self.chrom_sizes.get(chr, None) for chr in chr_included}
+
+    @property
+    def dict(self):
+        return self.chrom_sizes
+
+    def save_chrom_sizes(self):
+        filepath = self.annotation_dir / f"{self.assembly}_chrom_sizes.txt"
+        filepath.write_text(
+            "\n".join(
+                f"{chrom}\t{length}" for chrom, length in self.chrom_sizes.items()
+            )
+        )
+
+    def parse_or_download_chrom_sizes(self):
+        filepath = self.annotation_dir / f"{self.assembly}_chrom_sizes.txt"
+        if filepath.exists():
+            return self._parse_chrom_data(filepath.read_text())
+        else:
+            return self._download_chrom_sizes()
+
+    def as_pyranges(self):
+        try:
+            import pyranges as pr
+
+            cs = pd.DataFrame(
+                {
+                    "Chromosome": list(self.chrom_sizes.keys()),
+                    "Start": 0,
+                    "End": list(self.chrom_sizes.values()),
+                }
+            ).sort_values(by=["Chromosome", "Start", "End"])
+            return pr.PyRanges(cs, int64=True)
+        except ImportError:
+            raise ImportError("pyranges is not installed")
+
+    def __repr__(self) -> str:
+        return (
+            f"ChromSize(assembly={self.assembly}, annotation_dir={self.annotation_dir})"
+        )
+
+    def tiling_region(self, tile_size: int, tile_overlap: int = 0):
+        pr_regions = self.as_pyranges()
+        return pr_regions.tile(size=tile_size, overlap=tile_overlap).as_df()
+
+
+class ChromGap:
+    """
+    Class for handling chromosome gap information.
+
+    Downloads and parses chromosome gap (AGP) files from UCSC genome browser.
+    Provides methods to access gap annotations like telomeres and heterochromatin.
+
+    Parameters
+    ----------
+    assembly : str
+        Genome assembly name (e.g. 'hg38', 'mm10')
+    annotation_dir : str or Path, optional
+        Directory to store annotation files
+
+    Attributes
+    ----------
+    assembly : str
+        Genome assembly name
+    annotation_dir : Path
+        Directory containing annotation files
+    agp_data : pandas.DataFrame
+        AGP data containing gap annotations
+
+    Methods
+    -------
+    get_telomeres(return_tabix=False)
+        Get telomere regions
+    get_heterochromatin(return_tabix=False)
+        Get heterochromatin regions
+    save_agp_data()
+        Save AGP data to file
+    """
+
+    def __init__(self, assembly=None, annotation_dir=None):
+        self.assembly = assembly
+        self.annotation_dir = Path(annotation_dir) if annotation_dir else None
+
+        if self.assembly is None:
+            raise ValueError("assembly is not specified")
+        if self.annotation_dir is None:
+            raise ValueError("annotation_dir is not specified")
+
+        self.agp_data = self.parse_or_download_agp()
+
+    def _download_agp(self):
+        url = f"https://hgdownload.soe.ucsc.edu/goldenPath/{self.assembly}/bigZips/{self.assembly}.agp.gz"
+        response = requests.get(url)
+        if response.status_code != 200:
+            raise ConnectionError("Failed to download AGP data")
+        return gzip.decompress(response.content).decode("utf-8")
+
+    def _parse_agp_data(self, data):
+        columns = [
+            "chrom",
+            "start",
+            "end",
+            "part_number",
+            "component_type",
+            "component_id",
+            "component_start",
+            "component_end",
+            "orientation",
+        ]
+        return pd.read_csv(StringIO(data), sep="\t", comment="#", names=columns)
+
+    def get_telomeres(self, return_tabix=False):
+        df = self.agp_data[self.agp_data["component_start"] == "telomere"]
+        if return_tabix:
+            return pandas_to_tabix_region(df)
+        return df
+
+    def get_heterochromatin(self, return_tabix=False):
+        df = self.agp_data[
+            self.agp_data["component_start"].isin(["heterochromatin", "centromere"])
+        ]
+        if return_tabix:
+            return pandas_to_tabix_region(df)
+        return df
+
+    def save_agp_data(self):
+        filepath = self.annotation_dir / f"{self.assembly}_agp.txt"
+        self.agp_data.to_csv(filepath, sep="\t", index=False)
+
+    def parse_or_download_agp(self):
+        filepath = self.annotation_dir / f"{self.assembly}_agp.txt"
+        if filepath.exists():
+            return pd.read_csv(filepath, sep="\t")
+        else:
+            data = self._download_agp()
+            agp_data = self._parse_agp_data(data)
+            self.agp_data = agp_data
+            self.save_agp_data()
+            return agp_data
+
+    def __repr__(self) -> str:
+        return (
+            f"ChromGap(assembly={self.assembly}, annotation_dir={self.annotation_dir})"
+        )
+
+
+class Genome:
+    """
+    Main class for accessing and manipulating genome sequences.
+
+    Downloads genome sequence files and provides methods to access sequences
+    and genomic regions. Handles chromosome naming conventions and coordinates.
+
+    Parameters
+    ----------
+    assembly : str
+        Genome assembly name (e.g. 'hg38', 'mm10')
+
+    Attributes
+    ----------
+    assembly : str
+        Genome assembly name
+    genome_seq : pyfaidx.Fasta
+        Genome sequence accessor
+    chr_suffix : str
+        Chromosome name prefix ('chr' or '')
+
+    Methods
+    -------
+    get_sequence(chromosome, start, end, strand='+')
+        Get DNA sequence for a genomic region, you can also use the sequence property with `self.genome_seq[chromosome][start:end]`
+    random_draw(chromosome, length=4000000, strand='+')
+        Get random genomic region
+    tiling_region(chromosome, tile_size, step_size, strand='+')
+        Create tiled regions across a chromosome
+    normalize_chromosome(chromosome)
+        Normalize chromosome name format
+    """
+
+    def __init__(self, assembly: str) -> None:
+        self.assembly = assembly
+        self._download_files_if_not_exist()
+        fasta_file = Path(_settings.get_setting("genome_dir")) / f"{self.assembly}.fa"
+        self.genome_seq = Fasta(str(fasta_file))
+
         if list(self.genome_seq.keys())[0].startswith("chr"):
             self.chr_suffix = "chr"
         else:
             self.chr_suffix = ""
+
+    @property
+    def annotation_dir(self) -> str:
+        return str(Path(_settings.get_setting("annotation_dir")))
+
+    @property
+    def chrom_sizes(self) -> dict:
+        """Get chromosome sizes, downloading if necessary"""
+        return ChromSize(self.assembly, self.annotation_dir).dict
+
+    @property
+    def chrom_gap(self) -> dict:
+        """Get chromosome gap, downloading if necessary"""
+        return ChromGap(self.assembly, self.annotation_dir)
+
+    @property
+    def blacklist(self) -> dict:
+        """Get blacklist, downloading if necessary"""
+        if (
+            Path(_settings.get_setting("annotation_dir"))
+            / f"{self.assembly}-blacklist.v2.bed.gz"
+        ).exists():
+            return pd.read_csv(
+                Path(_settings.get_setting("annotation_dir"))
+                / f"{self.assembly}-blacklist.v2.bed.gz",
+                sep="\t",
+                header=None,
+                names=["Chromosome", "Start", "End", "Category"],
+            )
+        else:
+            return pd.DataFrame()
+
+    def _download_files_if_not_exist(self) -> None:
+        """Download genome files if they don't exist"""
+        fasta_file = Path(_settings.get_setting("genome_dir")) / f"{self.assembly}.fa"
+        if not fasta_file.exists():
+            # Define file name and URL
+            fname = f"{self.assembly}.fa.gz"
+            url = f"http://hgdownload.cse.ucsc.edu/goldenPath/{self.assembly}/bigZips/{self.assembly}.fa.gz"
+
+            # Register the file with pooch
+            _settings.POOCH.path = Path(_settings.get_setting("genome_dir"))
+            _settings.POOCH.registry[fname] = None  # Will be updated with hash later
+            _settings.POOCH.urls[fname] = url
+
+            # Download and decompress the file
+            downloaded_file = _settings.POOCH.fetch(fname, processor=pooch.Decompress())
+
+            # Move to final location
+            Path(downloaded_file).rename(fasta_file)
+
+        chrom_sizes_file = str(
+            Path(_settings.get_setting("annotation_dir"))
+            / f"{self.assembly}.chrom.sizes"
+        )
+        if not Path(chrom_sizes_file).exists():
+            # Define file name and URL
+            fname = f"{self.assembly}.chrom.sizes"
+            url = f"http://hgdownload.cse.ucsc.edu/goldenPath/{self.assembly}/bigZips/{fname}"
+
+            # Register the file with pooch
+            _settings.POOCH.registry[fname] = None  # Will be updated with hash later
+            _settings.POOCH.urls[fname] = url
+
+            # Download chromosome sizes
+            downloaded_file = _settings.POOCH.fetch(fname)
+
+            # Move to final location
+            Path(downloaded_file).rename(self.chrom_sizes_file)
+
+        chrom_gap_file = str(
+            Path(_settings.get_setting("annotation_dir")) / f"{self.assembly}.agp.gz"
+        )
+        if not Path(chrom_gap_file).exists():
+            # Define file name and URL
+            fname = f"{self.assembly}.agp.gz"
+            url = f"http://hgdownload.cse.ucsc.edu/goldenPath/{self.assembly}/bigZips/{fname}"
+
+            # Register the file with pooch
+            _settings.POOCH.registry[fname] = None  # Will be updated with hash later
+            _settings.POOCH.urls[fname] = url
+
+            # Download chromosome gap
+            downloaded_file = _settings.POOCH.fetch(fname)
+
+            # Move to final location
+            Path(downloaded_file).rename(chrom_gap_file)
+
+        blacklist_file = str(
+            Path(_settings.get_setting("annotation_dir"))
+            / f"{self.assembly}-blacklist.v2.bed.gz"
+        )
+        if not Path(blacklist_file).exists():
+            try:
+                # Define file name and URL
+                fname = f"{self.assembly}-blacklist.v2.bed.gz"
+                url = f"https://raw.githubusercontent.com/Boyle-Lab/Blacklist/refs/heads/master/lists/{fname}"
+
+                # Register the file with pooch
+                _settings.POOCH.registry[fname] = (
+                    None  # Will be updated with hash later
+                )
+                _settings.POOCH.urls[fname] = url
+
+                # Download blacklist
+                downloaded_file = _settings.POOCH.fetch(fname)
+
+                # Move to final location
+                Path(downloaded_file).rename(blacklist_file)
+            except Exception as e:
+                print(f"Failed to download blacklist: {e}, using empty blacklist")
 
     def __repr__(self) -> str:
         return f"Genome: {self.assembly} with fasta file: {self.fasta_file}"
@@ -104,6 +475,39 @@ class Genome:
 
 
 class GenomicRegion:
+    """
+    Class representing a single genomic region.
+
+    Stores coordinates and provides methods to manipulate and analyze
+    a genomic region.
+
+    Parameters
+    ----------
+    genome : Genome
+        Genome object containing sequence data
+    chromosome : str
+        Chromosome name
+    start : int
+        Start position (0-based)
+    end : int
+        End position (exclusive)
+    strand : str, optional
+        Strand ('+' or '-'), defaults to '+'
+
+    Methods
+    -------
+    sequence
+        Get DNA sequence for region
+    get_motif_score(motif)
+        Calculate motif scores
+    lift_over(target_genome, lo)
+        Convert coordinates to different assembly
+    get_flanking_region(upstream, downstream)
+        Get expanded region
+    tiling_region(tile_size, step_size)
+        Create tiled sub-regions
+    """
+
     def __init__(
         self, genome: Genome, chromosome: str, start: int, end: int, strand: str = "+"
     ):
@@ -461,22 +865,35 @@ class GenomicRegionCollection(PyRanges):
 def read_peaks(
     peak_file: str,
     return_collection: bool = False,
-    genome: Genome = None,
-    return_columns: list[str] = None,
+    genome: Genome | None = None,
+    return_columns: list[str] | None = None,
 ) -> pd.DataFrame | GenomicRegionCollection:
     """
-    Read peaks from a BED or narrowPeak file. Automatically detects number of columns.
+    Read genomic peak regions from BED or narrowPeak files.
 
-    Args:
-        peak_file: Path to peak file
-        return_collection: If True, returns a GenomicRegionCollection instead of DataFrame
-        genome: Required if return_collection is True, the Genome object for the peaks
-        return_columns: If not None, returns a DataFrame with only the specified columns
-    Returns:
-        DataFrame with peak regions or GenomicRegionCollection if return_collection=True
+    Automatically detects file format and number of columns.
+    Can return either a pandas DataFrame or GenomicRegionCollection.
 
-    Raises:
-        ValueError: If file format is invalid or if genome is not provided when return_collection=True
+    Parameters
+    ----------
+    peak_file : str
+        Path to peak file in BED or narrowPeak format
+    return_collection : bool, optional
+        If True, returns GenomicRegionCollection instead of DataFrame
+    genome : Genome, optional
+        Required if return_collection=True
+    return_columns : list of str, optional
+        Specific columns to return in DataFrame
+
+    Returns
+    -------
+    Union[pd.DataFrame, GenomicRegionCollection]
+        Peak regions as DataFrame or GenomicRegionCollection
+
+    Raises
+    ------
+    ValueError
+        If file format is invalid or genome not provided when needed
     """
     # Standard column names for different BED formats
     bed_columns = {
@@ -525,7 +942,7 @@ def read_peaks(
     ]
 
     # Read first line to detect number of columns
-    with open(peak_file) as f:
+    with Path(peak_file).open() as f:
         first_line = f.readline().strip()
         num_columns = len(first_line.split("\t"))
 
@@ -576,7 +993,33 @@ def read_peaks(
 
         return GenomicRegionCollection(genome=genome, df=df)
 
-    if return_columns is None:
-        return peaks
-    else:
+    if return_columns:
         return peaks[return_columns]
+    else:
+        return peaks
+
+
+def read_blacklist(genome: str) -> pd.DataFrame:
+    """
+    Read the blacklist regions from the ENCODE project.
+    """
+    supported_genomes = ["mm10", "ce10", "ce11", "dm3", "dm6", "hg19", "hg38"]
+    if genome not in supported_genomes:
+        raise ValueError(f"Only {supported_genomes} are supported")
+    blacklist = pd.read_csv(
+        f"https://raw.githubusercontent.com/Boyle-Lab/Blacklist/refs/heads/master/lists/{genome}-blacklist.v2.bed.gz",
+        sep="\t",
+        header=None,
+    )
+    blacklist.columns = ["Chromosome", "Start", "End", "name"]
+    blacklist["Start"] += 1
+    blacklist = PyRanges(blacklist).sort().df[["Chromosome", "Start", "End"]]
+    return blacklist
+
+
+def pandas_to_tabix_region(df, chrom_col="chrom", start_col="start", end_col="end"):
+    return " ".join(
+        df.apply(
+            lambda x: f"{x[chrom_col]}:{x[start_col]}-{x[end_col]}", axis=1
+        ).tolist()
+    )

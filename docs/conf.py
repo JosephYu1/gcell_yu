@@ -1,10 +1,7 @@
-from __future__ import annotations
-
 import sys
 from datetime import datetime
 from functools import partial
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING
 
 import matplotlib  # noqa
 from docutils import nodes
@@ -16,9 +13,7 @@ matplotlib.use("agg")
 HERE = Path(__file__).parent
 sys.path[:0] = [str(HERE.parent), str(HERE / "extensions")]
 import gcell  # noqa
-
-if TYPE_CHECKING:
-    from sphinx.application import Sphinx
+from sphinx.application import Sphinx
 
 
 # -- General configuration ------------------------------------------------

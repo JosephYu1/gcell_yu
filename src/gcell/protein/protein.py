@@ -1,7 +1,4 @@
-from __future__ import annotations
-
-import os
-from genericpath import exists
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,17 +10,17 @@ from Bio.PDB import PDBParser
 from matplotlib.patches import Patch
 from scipy.ndimage import gaussian_filter1d
 
-from .data import get_genename_to_uniprot, get_lddt, get_schema, get_seq
+from .._settings import get_setting
+from ._math import get_3d_avg, normalize, smooth, square_grad
+from .data import (
+    get_lddt_from_uniprot_id,
+    get_seq_from_uniprot_id,
+    get_uniprot_from_gene_name,
+)
 
 pio.templates.default = "plotly_white"
-# gaussian filter
 
 bioparser = PDBParser()
-
-seq = get_seq()
-genename_to_uniprot = get_genename_to_uniprot()
-lddt = get_lddt()
-schema = get_schema()
 
 
 def generate_pair_sequence(P1, P2, output_dir):
@@ -34,58 +31,15 @@ def generate_pair_sequence(P1, P2, output_dir):
     low_or_high_plddt_region_sequence_b = protein_b.low_or_high_plddt_region_sequence
     for i, seq_a in enumerate(low_or_high_plddt_region_sequence_a):
         for j, seq_b in enumerate(low_or_high_plddt_region_sequence_b):
-            os.makedirs(f"{output_dir}/", exist_ok=True)
-            filename = f"{output_dir}/{protein_a.gene_name}_{i}_{protein_b.gene_name}_{j}.fasta"
-            with open(filename, "w") as f:
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+            filename = (
+                Path(output_dir)
+                / f"{protein_a.gene_name}_{i}_{protein_b.gene_name}_{j}.fasta"
+            )
+            with Path(filename).open("w") as f:
                 f.write(
                     f">{protein_a.gene_name}_{i}.{protein_b.gene_name}_{j}\n{str(seq_a.seq)}:{str(seq_b.seq)}\n"
                 )
-
-
-def min_max(arr):
-    """normalize an array to 0-1"""
-    if isinstance(arr, np.ndarray):
-        return (arr - arr.min()) / (arr.max() - arr.min())
-    elif isinstance(arr, list):
-        return [(a - min(arr)) / (max(arr) - min(arr)) for a in arr]
-    elif isinstance(arr, pd.DataFrame):
-        arr_copy = arr.copy()
-        arr_copy["plddt"] = (arr_copy["plddt"] - arr_copy["plddt"].min()) / (
-            arr_copy["plddt"].max() - arr_copy["plddt"].min()
-        )
-        return arr_copy
-
-
-def normalize(x):
-    new_x = x - x.min()
-    return new_x / new_x.max()
-
-
-def smooth(x, window_size=10):
-    result = gaussian_filter1d(x, sigma=window_size / 2)
-    return normalize(result)
-
-
-def get_3d_avg(x, pairwise_interaction):
-    x = x * pairwise_interaction
-    x = x.sum(1) / ((x > 0).sum(1) + 0.01)
-    return x / x.max()
-
-
-def square_grad(f):
-    return normalize(np.gradient(f) ** 2)
-
-
-def extract_wt_from_mut(str):
-    return str[0:1]
-
-
-def extract_alt_from_mut(str):
-    return str[-1:]
-
-
-def extract_pos_from_mut(str):
-    return int(str[1:-1])
 
 
 class Protein:
@@ -98,7 +52,7 @@ class Protein:
         use_es=False,
         esm_folder="/manitou/pmg/users/xf2217/demo_data/esm1b/esm1b_t33_650M_UR90S_1",
         af2_folder="/manitou/pmg/users/xf2217/demo_data/af2",
-        xml_dir=None,
+        xml_dir=Path(get_setting("cache_dir")) / "uniprot_xml",
         window_size=10,
     ):
         """
@@ -112,11 +66,12 @@ class Protein:
         self.esm_folder = esm_folder
         self.af2_folder = af2_folder
         self.xml_dir = xml_dir
-
-        self.uniprot_id = genename_to_uniprot[gene_name]
-        self.plddt = lddt[self.uniprot_id]
+        # create if not exists
+        self.xml_dir.mkdir(parents=True, exist_ok=True)
+        self.uniprot_id = get_uniprot_from_gene_name(gene_name)
+        self.plddt = get_lddt_from_uniprot_id(self.uniprot_id)
         self.length = len(self.plddt)
-        self.sequence = seq[self.uniprot_id]
+        self.sequence = get_seq_from_uniprot_id(self.uniprot_id)
         self.smoothed_plddt_gaussian = self.get_smoothed_plddt_gaussian()
         self.smoothed_plddt = self.get_smooth_plddt()
         self.domains = self.get_domain_from_uniprot()
@@ -318,14 +273,16 @@ class Protein:
             )
 
         else:
-            if exists(f"{af2_folder}/pairwise_interaction/" + self.uniprot_id + ".npy"):
+            if Path(
+                f"{af2_folder}/pairwise_interaction/" + self.uniprot_id + ".npy"
+            ).exists():
                 distance = np.load(
                     f"{af2_folder}/pairwise_interaction/" + self.uniprot_id + ".npy"
                 )
             else:
                 # make sure structures folder exists
-                if not exists(f"{af2_folder}/structures/"):
-                    os.makedirs(f"{af2_folder}/structures/")
+                if not Path(f"{af2_folder}/structures/").exists():
+                    Path(f"{af2_folder}/structures/").mkdir(parents=True, exist_ok=True)
 
                 # download pdb file from AFDB to structures/
                 import urllib.request
@@ -343,13 +300,12 @@ class Protein:
                 )
 
                 # https://alphafold.ebi.ac.uk/files/AF-Q02548-F1-model_v4.pdb
-                with open(
+                with Path(
                     f"{af2_folder}/structures/AF-"
                     + self.uniprot_id
-                    + "-F1-model_v4.pdb",
-                ) as f:
+                    + "-F1-model_v4.pdb"
+                ).open() as f:
                     structure = bioparser.get_structure("monomer", f)
-
                 model = structure[0]
                 chain = model["A"]
                 residues = [r for r in model.get_residues()]
@@ -366,8 +322,10 @@ class Protein:
                         except KeyError:
                             continue
             # make sure pairwise_interaction folder exists
-            if not exists(f"{af2_folder}/pairwise_interaction/"):
-                os.makedirs(f"{af2_folder}/pairwise_interaction/")
+            if not Path(f"{af2_folder}/pairwise_interaction/").exists():
+                Path(f"{af2_folder}/pairwise_interaction/").mkdir(
+                    parents=True, exist_ok=True
+                )
 
             np.save(
                 f"{af2_folder}/pairwise_interaction/" + self.uniprot_id + ".npy",

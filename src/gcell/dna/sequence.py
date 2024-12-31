@@ -1,4 +1,4 @@
-from __future__ import annotations
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -65,7 +65,7 @@ class DNASequence(Seq):
         """
         from Bio.Seq import MutableSeq
 
-        if type(pos) != int:
+        if not isinstance(pos, int):
             pos = int(pos)
         if len(alt) == 1:
             seq = MutableSeq(self.seq)
@@ -202,7 +202,7 @@ class DNASequenceCollection:
         # remove the rows with multiple Ns
         output = output[~output.seq.str.contains("NN")]
 
-        if raw == True:
+        if raw is True:
             return output
 
         output = (
@@ -257,7 +257,7 @@ class DNASequenceCollection:
 
     def save_txt(self, filename):
         """Save the DNASequenceCollection object as a text file"""
-        with open(filename, "w") as f:
+        with Path(filename).open("w") as f:
             for seq in self.sequences:
                 f.write(seq.seq + "\n")
 

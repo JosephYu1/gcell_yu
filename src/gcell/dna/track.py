@@ -1,6 +1,4 @@
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,10 +6,8 @@ import pandas as pd
 import pyBigWig
 from matplotlib import gridspec
 
-from .chromsize import ChromSize
-
-if TYPE_CHECKING:
-    from ..rna.gencode import Gencode
+from ..rna.gencode import Gencode
+from .genome import ChromSize
 
 
 def get_iqr_threshold(
@@ -443,7 +439,7 @@ class Track:
         if label not in self.tracks:
             raise ValueError(f"Label {label} not found in tracks")
 
-        with open(out_file, "w") as f:
+        with Path(out_file).open("w") as f:
             for i, v in enumerate(self.convoluted_tracks[label]):
                 f.write(f"{self.chrom}\t{i+self.start}\t{i+self.start+1}\t{v}\n")
 

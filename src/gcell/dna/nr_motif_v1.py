@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import pickle
 from pathlib import Path
 
@@ -7,7 +5,7 @@ import pandas as pd
 
 try:
     from MOODS.tools import reverse_complement
-except:
+except ImportError:
     print(
         "MOODS not installed. Please install MOODS to use the reverse_complement function."
     )

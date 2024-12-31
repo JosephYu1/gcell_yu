@@ -44,7 +44,9 @@ dependencies = [
     "seqlogo",
     "zarr",
     "lingam",
+    "pyarrow",
     "hydra-zen",
+    "pooch",
     "gradio",
     "dash-bio",
 ]
@@ -68,6 +70,16 @@ dev = [
     # static checking
     "pre-commit",
     "towncrier",
+    "ipykernel",
+    "jupyter",
+    "nglview",
+    "py3Dmol",
+    "nbsphinx",
+    "nbformat",
+]
+demo = [
+    "nglview",
+    "py3Dmol",
 ]
 doc = [
     "sphinx>=7",
@@ -141,15 +153,15 @@ docstring-code-format = true
 
 [tool.ruff.lint]
 select = [
-    #"E",       # Error detected by Pycodestyle
-    #"F",       # Errors detected by Pyflakes
+    "E",       # Error detected by Pycodestyle
+    "F",       # Errors detected by Pyflakes
     "W",       # Warning detected by Pycodestyle
     "UP",      # pyupgrade
     "I",       # isort
     "TCH",     # manage type checking blocks
     "TID251",  # Banned imports
     "ICN",     # Follow import conventions
-    #"PTH",     # Pathlib instead of os.path
+    "PTH",     # Pathlib instead of os.path
     "PYI",     # Typing
     "PLR0917", # Ban APIs with too many positional parameters
     "PT",      # Pytest style
@@ -158,11 +170,11 @@ select = [
 ignore = [
     "E501",  # line too long
     "E402",  # module level import not at top of file
+    "F841",  # Unused variable
 ]
 
 [tool.ruff.lint.isort]
 known-first-party = ["gcell"]
-required-imports = ["from __future__ import annotations"]
 
 [tool.towncrier]
 package = "gcell"

@@ -6,28 +6,24 @@
 # ]
 # ///
 
-from __future__ import annotations
-
 import argparse
 import sys
 from collections import deque
 from contextlib import ExitStack
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 if sys.version_info >= (3, 11):
     import tomllib
 else:
     import tomli as tomllib
 
+from collections.abc import Generator, Iterable, Sequence
+from collections.abc import Set as AbstractSet
+from typing import Any, Self
+
 from packaging.requirements import Requirement
 from packaging.version import Version
-
-if TYPE_CHECKING:
-    from collections.abc import Generator, Iterable, Sequence
-    from collections.abc import Set as AbstractSet
-    from typing import Any, Self
 
 
 def min_dep(req: Requirement) -> Requirement:

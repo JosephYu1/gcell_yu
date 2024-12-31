@@ -7,3 +7,6 @@ celltype:
   jacob: True
   embed: True
   assets_dir: '.'
+  motif_dir: '.'
+  num_cls: 2
+s3_file_sys: NULL
