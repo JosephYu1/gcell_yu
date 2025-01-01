@@ -11,6 +11,7 @@ from omegaconf import DictConfig
 from pyranges import PyRanges as pr
 
 from .._logging import get_logger
+from .._settings import get_setting
 from ..cell.celltype import GETCellType, GETHydraCellType
 from ..config.config import load_config
 from ..dna.genome import Genome, GenomicRegionCollection
@@ -18,6 +19,7 @@ from ..dna.mutation import Mutations, read_rsid_parallel
 from ..dna.nr_motif_v1 import NrMotifV1
 from ..dna.sequence import DNASequence, DNASequenceCollection
 
+annotation_dir = get_setting("annotation_dir")
 logger = get_logger(__name__)
 
 
@@ -419,12 +421,9 @@ class GETHydraCellMutCollection(CellMutCollection):
             / "variant_analysis"
         )
         self.get_config_path = pkg_resources.resource_filename(
-            "caesar", "config/interpret.yaml"
+            "gcell", "config/interpret.yaml"
         )
         self.genome_path = cfg.machine.fasta_path
-        self.motif_path = pkg_resources.resource_filename(
-            "caesar", "data/NrMotifV1.pkl"
-        )
         self.num_workers = cfg.machine.num_workers
         self.debug = False
         hydra_celltype = GETHydraCellType.from_config(cfg)
@@ -446,7 +445,7 @@ class GETHydraCellMutCollection(CellMutCollection):
 
     def setup_genome_and_motif(self):
         self.genome = Genome("hg38")
-        self.motif = NrMotifV1.load_from_pickle(self.motif_path)
+        self.motif = NrMotifV1.load_from_pickle()
 
     def setup_variants(self):
         genes_list = self.cfg.task.gene_list.split(",")

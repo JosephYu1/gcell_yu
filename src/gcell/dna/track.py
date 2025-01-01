@@ -371,8 +371,11 @@ class Track:
             conv_size (int, optional): The size of the convolution window. Defaults to 100.
         """
         # Get motif density
-        from caesar.io.zarr_io import DenseZarrIO
-
+        try:
+            from caesar.io.zarr_io import DenseZarrIO
+        except ImportError:
+            "caesar is not installed, this function is not available"
+            return
         m = DenseZarrIO(motif_zarr_path)
         motif_density = m.get_track(chr, start, end)
         for i, quantile in enumerate(

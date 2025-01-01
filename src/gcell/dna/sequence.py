@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from pathlib import Path
 
 import numpy as np
@@ -5,21 +6,55 @@ import pandas as pd
 import zarr
 from Bio import SeqIO
 from Bio.Seq import Seq
+from numpy.typing import NDArray
 from scipy.sparse import csr_matrix, save_npz, vstack
 from tqdm import tqdm
 
-from .motif import print_results
+from .motif import MotifCollection, print_results
+
+"""
+DNA sequence manipulation and analysis module.
+
+This module provides classes for working with DNA sequences, including one-hot encoding,
+mutation analysis, and various file format conversions. It supports operations like
+reverse complement generation, sequence padding, and motif scanning.
+
+Classes:
+    DNASequence: A class for manipulating individual DNA sequences
+    DNASequenceCollection: A class for working with collections of DNA sequences
+"""
 
 
 class DNASequence(Seq):
-    def __init__(self, seq, header=""):
-        self.header = header
-        self.seq = str(seq).upper()
-        self._data = str(
-            seq
-        ).upper()  # convert DNA sequence to upper case and encode from ASCII to bytes
+    """
+    A class for representing and manipulating DNA sequences.
 
-        self.one_hot_encoding = {
+    This class extends Bio.Seq.Seq with additional functionality for DNA sequence
+    manipulation, including one-hot encoding, padding, and mutation operations.
+
+    Parameters
+    ----------
+    seq : str
+        The DNA sequence string
+    header : str, optional
+        Identifier or description for the sequence (default: "")
+
+    Attributes
+    ----------
+    header : str
+        Sequence identifier or description
+    seq : str
+        The DNA sequence in uppercase
+    one_hot_encoding : dict
+        Dictionary mapping nucleotides to their one-hot encoded vectors
+    """
+
+    def __init__(self, seq: str, header: str = "") -> None:
+        self.header: str = header
+        self.seq: str = str(seq).upper()
+        self._data: str = str(seq).upper()
+
+        self.one_hot_encoding: dict[str, list[int]] = {
             "A": [1, 0, 0, 0],
             "C": [0, 1, 0, 0],
             "G": [0, 0, 1, 0],
@@ -27,19 +62,40 @@ class DNASequence(Seq):
             "N": [0, 0, 0, 0],
         }
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.header
 
-    def get_reverse_complement(self):
+    def get_reverse_complement(self) -> str:
         """
-        Get the reverse complement of a DNA sequence
+        Generate the reverse complement of the DNA sequence.
+
+        Returns
+        -------
+        str
+            The reverse complement sequence
         """
-        complement = {"A": "T", "C": "G", "G": "C", "T": "A", "N": "N"}
+        complement: dict[str, str] = {"A": "T", "C": "G", "G": "C", "T": "A", "N": "N"}
         return "".join([complement[base] for base in self.seq[::-1]])
 
-    def padding(self, left=0, right=0, target_length=0):
+    def padding(
+        self, left: int = 0, right: int = 0, target_length: int = 0
+    ) -> "DNASequence":
         """
-        Pad a DNA sequence
+        Pad the DNA sequence with N's.
+
+        Parameters
+        ----------
+        left : int, optional
+            Number of N's to add to the left (default: 0)
+        right : int, optional
+            Number of N's to add to the right (default: 0)
+        target_length : int, optional
+            Desired total length of sequence (default: 0)
+
+        Returns
+        -------
+        DNASequence
+            A new DNASequence object with padding applied
         """
         if target_length == 0:
             return DNASequence("N" * left + self.seq + "N" * right, self.header)
@@ -59,9 +115,21 @@ class DNASequence(Seq):
                 self.header,
             )
 
-    def mutate(self, pos, alt):
+    def mutate(self, pos: int, alt: str) -> "DNASequence":
         """
-        Mutate a DNA sequence using biopython
+        Create a new sequence with a mutation at the specified position.
+
+        Parameters
+        ----------
+        pos : int
+            Position to mutate (0-based indexing)
+        alt : str
+            Alternative base(s) to insert
+
+        Returns
+        -------
+        DNASequence
+            A new DNASequence object with the mutation applied
         """
         from Bio.Seq import MutableSeq
 
@@ -77,9 +145,14 @@ class DNASequence(Seq):
 
     # attribute to get one-hot encoding
     @property
-    def one_hot(self):
+    def one_hot(self) -> NDArray[np.int8]:
         """
-        Get one-hot encoding of a DNA sequence
+        Convert the sequence to one-hot encoded format.
+
+        Returns
+        -------
+        numpy.ndarray
+            One-hot encoded representation of the sequence, shape (sequence_length, 4)
         """
         return (
             np.array([self.one_hot_encoding[base] for base in self.seq])
@@ -89,8 +162,8 @@ class DNASequence(Seq):
 
     def save_zarr(
         self,
-        zarr_file_path,
-        included_chromosomes=[
+        zarr_file_path: str | Path,
+        included_chromosomes: list[str] = [
             "chr1",
             "chr2",
             "chr3",
@@ -116,7 +189,7 @@ class DNASequence(Seq):
             "chrX",
             "chrY",
         ],
-    ):
+    ) -> None:
         """
         Save the genome sequence data in Zarr format.
 
@@ -138,26 +211,52 @@ class DNASequence(Seq):
 
 
 class DNASequenceCollection:
-    """A collection of DNA sequences objects"""
+    """
+    A collection of DNA sequences with batch processing capabilities.
 
-    def __init__(self, sequences):
+    This class provides methods for working with multiple DNA sequences, including
+    file I/O operations, motif scanning, and various data format conversions.
+
+    Parameters
+    ----------
+    sequences : list
+        List of Bio.SeqRecord objects or DNASequence objects
+
+    Attributes
+    ----------
+    sequences : list
+        The collection of sequence objects
+    """
+
+    def __init__(self, sequences: list[SeqIO.SeqRecord]) -> None:
         self.sequences = sequences
 
-    def __iter__(self):
-        """for each sequence in the collection, convert to DNASequence object"""
+    def __iter__(self) -> Iterator[DNASequence]:
+        """Yield each sequence as a DNASequence object."""
         for seq in self.sequences:
             yield DNASequence(str(seq.seq), seq.id)
 
-    def from_fasta(filename):
+    @classmethod
+    def from_fasta(cls, filename: str | Path) -> "DNASequenceCollection":
         """
-        Read a fasta file and create a DNASequenceCollection object using SeqIO.parse
-        """
-        return DNASequenceCollection(list(SeqIO.parse(filename, "fasta")))
+        Create a DNASequenceCollection from a FASTA file.
 
-    def mutate(self, pos_list, alt_list):
+        Parameters
+        ----------
+        filename : str or Path
+            Path to the FASTA file
+
+        Returns
+        -------
+        DNASequenceCollection
+            New collection containing sequences from the FASTA file
         """
-        Mutate a DNASequenceCollection object
-        """
+        return cls(list(SeqIO.parse(filename, "fasta")))
+
+    def mutate(
+        self, pos_list: list[int], alt_list: list[str]
+    ) -> "DNASequenceCollection":
+        """Mutate sequences at specified positions."""
         return DNASequenceCollection(
             [
                 seq.mutate(pos, alt)
@@ -165,7 +264,26 @@ class DNASequenceCollection:
             ]
         )
 
-    def scan_motif(self, motifs, non_negative=True, raw=False):
+    def scan_motif(
+        self, motifs: MotifCollection, non_negative: bool = True, raw: bool = False
+    ) -> pd.DataFrame:
+        """
+        Scan sequences for specified motifs.
+
+        Parameters
+        ----------
+        motifs : MotifCollection
+            Collection of motifs to scan for
+        non_negative : bool, optional
+            If True, set negative scores to 0 (default: True)
+        raw : bool, optional
+            If True, return raw scanning results (default: False)
+
+        Returns
+        -------
+        pandas.DataFrame
+            Motif scanning results, either as raw data or summarized scores
+        """
         seqs = self.sequences
         # initialize the output list
         output = []
@@ -234,7 +352,7 @@ class DNASequenceCollection:
 
         return output
 
-    def save_npz(self, filename):
+    def save_npz(self, filename: str | Path) -> None:
         """
         Save a DNASequenceCollection object as one-hot encoding in a sparse matrix in npz format,
         with sequence length information included in the filename
@@ -255,13 +373,18 @@ class DNASequenceCollection:
         # save the sparse matrix to a npz file with sequence length information in the filename
         save_npz(filename, sparse_matrix)
 
-    def save_txt(self, filename):
+    def save_txt(self, filename: str | Path) -> None:
         """Save the DNASequenceCollection object as a text file"""
         with Path(filename).open("w") as f:
             for seq in self.sequences:
                 f.write(seq.seq + "\n")
 
-    def save_zarr(self, filename, chunks=(100, 2000, 4), target_length=2000):
+    def save_zarr(
+        self,
+        filename: str | Path,
+        chunks: tuple[int, int, int] = (100, 2000, 4),
+        target_length: int = 2000,
+    ) -> None:
         """Save the one-hot encoding of a DNASequenceCollection object as a zarr file. Don't use sparse matrix, use compression"""
         # create a list to store the one-hot encoding
         one_hot = []
@@ -281,14 +404,30 @@ class DNASequenceCollection:
         zarr.save(filename, one_hot, chunks=chunks)
 
     def save_zarr_group(
-        self, zarr_root, key, chunks=(100, 2000, 4), target_length=2000
-    ):
-        """Save the one-hot encoding of a DNASequenceCollection object as a zarr group.
+        self,
+        zarr_root: str | Path,
+        key: str,
+        chunks: tuple[int, int, int] = (100, 2000, 4),
+        target_length: int = 2000,
+    ) -> None:
+        """
+        Save sequences as one-hot encoded data in a Zarr group.
 
-        Args:
-            zarr_root (str): The root directory of the zarr storage.
-            key (str): The key under which the data will be stored in the zarr group.
-            chunks (tuple): The chunk size for zarr storage.
+        Parameters
+        ----------
+        zarr_root : str
+            Root directory for the Zarr storage
+        key : str
+            Key for storing the dataset within the Zarr group
+        chunks : tuple, optional
+            Chunk size for Zarr storage (default: (100, 2000, 4))
+        target_length : int, optional
+            Target sequence length for padding (default: 2000)
+
+        Notes
+        -----
+        Sequences are padded to target_length if necessary and stored as
+        one-hot encoded arrays with zstd compression.
         """
         # create a list to store the one-hot encoding
         one_hot = []

@@ -1,4 +1,3 @@
-# %%
 import logging
 
 import pandas as pd
@@ -50,11 +49,10 @@ class InterProAPI:
             - Source database
             - Location on protein sequence
         """
-        endpoint = f"entry/protein/uniprot/{uniprot_id}"
+        endpoint = f"entry/interpro/protein/uniprot/{uniprot_id}"
 
         try:
             data = self._make_request(endpoint)
-
             entries = []
             for result in data.get("results", []):
                 entry_info = {
@@ -68,7 +66,9 @@ class InterProAPI:
                 }
 
                 # Extract locations if available
-                locations = result.get("proteins", {}).get("locations", [])
+                locations = result.get("proteins", [])[0].get(
+                    "entry_protein_locations", []
+                )
                 if locations:
                     for loc in locations:
                         entry_loc = entry_info.copy()
@@ -144,7 +144,7 @@ class InterProAPI:
         df = self.get_protein_entries(uniprot_id)
         if not df.empty:
             # Filter for domain entries and sort by position
-            domains = df[df["entry_type"] == "Domain"].sort_values("start")
+            domains = df[df["entry_type"] == "domain"].sort_values("start")
             return domains
         return pd.DataFrame()
 
@@ -160,20 +160,9 @@ class InterProAPI:
         df = self.get_protein_entries(uniprot_id)
         if not df.empty:
             # Filter for family entries
-            families = df[df["entry_type"] == "Family"]
+            families = df[df["entry_type"] == "family"]
             return families
         return pd.DataFrame()
-
-    def get_protein_features(self, uniprot_id: str) -> pd.DataFrame:
-        """Get all protein features including domains, families, sites, etc.
-
-        Args:
-            uniprot_id: UniProt accession ID
-
-        Returns:
-            DataFrame containing all feature information
-        """
-        return self.get_protein_entries(uniprot_id)
 
     def get_protein_go_terms(self, uniprot_id: str) -> list[dict]:
         """Get GO terms associated with protein's InterPro entries.
@@ -184,30 +173,13 @@ class InterProAPI:
         Returns:
             List of dictionaries containing GO term information
         """
-        endpoint = f"protein/uniprot/{uniprot_id}/go"
+        endpoint = f"protein/uniprot/{uniprot_id}/"
         try:
             data = self._make_request(endpoint)
-            return data.get("results", [])
+            data = data.get("metadata", {}).get("go_terms", [])
+            data = pd.DataFrame(data)
+            data["category"] = data["category"].apply(lambda x: x["name"])
+            return data.sort_values("category")
         except Exception as e:
             logger.error(f"Failed to get GO terms for {uniprot_id}: {e}")
             return []
-
-    def get_protein_pathways(self, uniprot_id: str) -> list[dict]:
-        """Get pathway annotations associated with protein's InterPro entries.
-
-        Args:
-            uniprot_id: UniProt accession ID
-
-        Returns:
-            List of dictionaries containing pathway information
-        """
-        endpoint = f"protein/uniprot/{uniprot_id}/pathway"
-        try:
-            data = self._make_request(endpoint)
-            return data.get("results", [])
-        except Exception as e:
-            logger.error(f"Failed to get pathways for {uniprot_id}: {e}")
-            return []
-
-
-# %%
