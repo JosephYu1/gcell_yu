@@ -36,6 +36,7 @@ dependencies = [
     "pyfaidx",
     "pyranges",
     "requests",
+    "openpyxl",
     "s3fs",
     "scipy",
     "seaborn",
@@ -76,6 +77,9 @@ dev = [
     "py3Dmol",
     "nbsphinx",
     "nbformat",
+    "snapatac2",
+    "scanpy",
+    "scikit-misc",
 ]
 demo = [
     "nglview",

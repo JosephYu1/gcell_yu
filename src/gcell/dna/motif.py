@@ -13,7 +13,7 @@ except ImportError:
 def pfm_conversion(
     filename, lo_bg=[2.977e-01, 2.023e-01, 2.023e-01, 2.977e-01], ps=0.01
 ):
-    mat = pfm_to_log_odds(filename, lo_bg, ps)
+    mat = pfm_to_log_odds(str(filename), lo_bg, ps)
     if len(mat) != 4:
         return False, mat
     else:

@@ -1,3 +1,20 @@
+"""
+Cell type analysis module for genomic data.
+
+This module provides classes and utilities for analyzing cell type-specific genomic data,
+including gene expression, motif analysis, and causal relationships between genes.
+
+Key Classes:
+    - Celltype: Base class for cell type analysis
+    - GETCellType: Extended cell type class with additional functionality
+    - GETHydraCellType: Cell type class optimized for hydra-config-based model analysis
+    - OneTSSJacobian: Class for analyzing Jacobian data for one TSS
+    - OneGeneJacobian: Class for analyzing Jacobian data for one gene
+    - GeneByMotif: Class for analyzing gene by motif relationships
+
+The module supports both local file system and S3 storage backends.
+"""
+
 import logging
 from concurrent.futures import ProcessPoolExecutor
 from io import BytesIO
@@ -44,7 +61,54 @@ logger = get_logger(__name__)
 
 
 class Celltype:
-    """All information of a cell type"""
+    """
+    Base class for cell type analysis.
+
+    This class provides core functionality for analyzing cell type-specific genomic data,
+    including gene expression, motif analysis, and regulatory relationships.
+
+    Parameters
+    ----------
+    features : numpy.ndarray
+        Array of feature names/identifiers
+    num_region_per_sample : int
+        Number of regions per sample
+    celltype : str
+        Name/identifier of the cell type
+    data_dir : str, optional
+        Directory containing data files, by default "../pretrain_human_bingren_shendure_apr2023"
+    interpret_dir : str, optional
+        Directory for interpretation results, by default "Interpretation"
+    assets_dir : str, optional
+        Directory for assets/resources, by default "assets"
+    input : bool, optional
+        Whether to load input data, by default False
+    jacob : bool, optional
+        Whether to load Jacobian data, by default False
+    embed : bool, optional
+        Whether to load embedding data, by default False
+    num_cls : int, optional
+        Number of classes, by default 2
+    s3_file_sys : S3FileSystem, optional
+        S3 filesystem object for remote storage, by default None
+
+    Attributes
+    ----------
+    celltype_name : str
+        Name of the cell type
+    features : numpy.ndarray
+        Array of features
+    num_features : int
+        Number of features
+    gene_annot : pandas.DataFrame
+        Gene annotations
+    peak_annot : pandas.DataFrame
+        Peak annotations
+    preds : numpy.ndarray
+        Prediction values
+    obs : numpy.ndarray
+        Observed values
+    """
 
     def __init__(
         self,
@@ -302,7 +366,19 @@ class Celltype:
         return gene_annot
 
     def get_gene_idx(self, gene_name: str):
-        """Get the index of a gene in the gene list."""
+        """
+        Get the index of a gene in the gene list.
+
+        Parameters
+        ----------
+        gene_name : str
+            Name of the gene
+
+        Returns
+        -------
+        numpy.ndarray
+            Array of indices where the gene appears
+        """
         return self.gene_annot[self.gene_annot["gene_name"] == gene_name].index.values
 
     def get_tss_idx(self, gene_name: str):
@@ -944,6 +1020,18 @@ class Celltype:
 
 class GETCellType(Celltype):
     def __init__(self, celltype, config, s3_file_sys=None):
+        """
+        Initialize GETCellType instance.
+
+        Parameters
+        ----------
+        celltype : str
+            Cell type name
+        config : Config
+            Configuration object
+        s3_file_sys : S3FileSystem, optional
+            S3 file system object
+        """
         features = config.celltype.features
         if features == "NrMotifV1":
             features = np.array(motif_clusters + ["Accessibility"])
@@ -971,6 +1059,36 @@ class GETCellType(Celltype):
 
 
 class GETHydraCellType(Celltype):
+    """
+    Cell type class optimized for hydra model analysis.
+
+    This class extends the base Celltype class with functionality specific to
+    the hydra model architecture, including zarr-based data storage and
+    efficient processing of large datasets.
+
+    Parameters
+    ----------
+    celltype : str
+        Name/identifier of the cell type
+    zarr_path : str
+        Path to zarr data
+    motif_path : str
+        Path to motif data file
+
+    Attributes
+    ----------
+    celltype : str
+        Name of the cell type
+    zarr_path : str
+        Path to zarr data
+    motif : NrMotifV1
+        Motif data object
+    features : list
+        List of features
+    num_features : int
+        Number of features
+    """
+
     def __init__(self, celltype, zarr_path, motif_path):
         # Initialize parent class attributes that will be needed
         self._gene_by_motif = None
@@ -1108,12 +1226,34 @@ class GETHydraCellType(Celltype):
     # class method create from config
     @classmethod
     def from_config(cls, cfg, celltype=None, zarr_path=None, motif_path=None):
+        """
+        Create instance from configuration.
+
+        Parameters
+        ----------
+        cfg : Config
+            Configuration object
+        celltype : str, optional
+            Cell type name
+        zarr_path : str, optional
+            Path to zarr data
+        motif_path : str, optional
+            Path to motif data
+
+        Returns
+        -------
+        GETHydraCellType
+            New instance
+        """
         if celltype is None:
             celltype = f"{cfg.dataset.leave_out_celltypes}"
         if zarr_path is None:
             zarr_path = f"{cfg.machine.output_dir}/{cfg.run.project_name}/{cfg.run.run_name}/{cfg.run.run_name}.zarr"
         if motif_path is None:
             motif_path = pkg_resources.resource_filename("gcell", "data/NrMotifV1.pkl")
+        logger.info(
+            f"Creating GETHydraCellType instance for {celltype}, loading data from {zarr_path}"
+        )
         return cls(celltype=celltype, zarr_path=zarr_path, motif_path=motif_path)
 
     def get_gene_by_motif(self, overwrite: bool = False):
@@ -1362,13 +1502,33 @@ class OneGeneJacobian(OneTSSJacobian):
 
 
 class GeneByMotif:
-    """Gene by motif jacobian data.
+    """
+    Class for analyzing gene by motif relationships.
 
-    This class can work with both:
-    1. Old directory structure using {interpret_dir}/allgenes/{celltype}.zarr
-    2. New directory structure using zarr_data_path
+    This class handles the analysis of relationships between genes and motifs,
+    including causal graph generation and correlation analysis.
 
-    If zarr_data_path is provided, it takes precedence over interpret_dir.
+    Parameters
+    ----------
+    celltype : str, optional
+        Cell type name
+    interpret_dir : str, optional
+        Interpretation directory path
+    jacob : pandas.DataFrame, optional
+        Jacobian data
+    s3_file_sys : S3FileSystem, optional
+        S3 filesystem object
+    zarr_data_path : str, optional
+        Path to zarr data
+
+    Attributes
+    ----------
+    celltype : str
+        Cell type name
+    data : pandas.DataFrame
+        Gene by motif data
+    interpret_dir : str
+        Interpretation directory path
     """
 
     def __init__(
@@ -1409,12 +1569,35 @@ class GeneByMotif:
     def get_causal(
         self,
         edgelist_file=None,
-        permute_columns: bool = True,
-        n: int = 3,
-        overwrite: bool = False,
+        permute_columns=True,
+        n=3,
+        overwrite=False,
         max_workers=None,
     ):
-        """Get the causal graph."""
+        """
+        Generate causal graph from gene by motif data.
+
+        This method creates a causal graph representing relationships between genes
+        and motifs using the LiNGAM algorithm. Results can be cached in zarr format.
+
+        Parameters
+        ----------
+        edgelist_file : str, optional
+            Path to save/load edge list
+        permute_columns : bool, optional
+            Whether to permute columns, by default True
+        n : int, optional
+            Number of permutations, by default 3
+        overwrite : bool, optional
+            Whether to overwrite existing data, by default False
+        max_workers : int, optional
+            Maximum number of parallel workers
+
+        Returns
+        -------
+        networkx.DiGraph
+            Directed graph representing causal relationships
+        """
         # Try loading from edgelist if provided
         if (
             edgelist_file is not None

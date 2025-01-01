@@ -1,7 +1,45 @@
+"""
+Non-redundant DNA Motif Collection (Version 1.0)
+==============================================
+
+This module provides functionality to work with the non-redundant transcription factor binding site (TFBS)
+motif clusters defined by Vierstra et al. The motifs are sourced from
+https://resources.altius.org/~jvierstra/projects/motif-clustering/releases/v1.0/.
+
+The module includes:
+    - Loading and managing motif clusters
+    - Converting between different motif formats
+    - Scanning sequences for motif matches
+    - Mapping between different gene naming conventions
+
+Classes
+-------
+NrMotifV1
+    Main class for working with the non-redundant motif collection.
+
+Dependencies
+-----------
+- MOODS: Required for reverse complement functionality
+- pandas: For data manipulation
+- pickle: For serialization
+- pathlib: For file path handling
+
+Example
+-------
+>>> from gcell.dna.nr_motif_v1 import NrMotifV1
+>>> motifs = NrMotifV1("path/to/motif/dir")
+>>> # Get a specific motif cluster
+>>> cluster = motifs.get_motif_cluster_by_name("CTCF")
+"""
+
+import os
 import pickle
 from pathlib import Path
 
 import pandas as pd
+from pandas import DataFrame
+
+from .._settings import get_setting
 
 try:
     from MOODS.tools import reverse_complement
@@ -18,6 +56,8 @@ from .motif import (
     pfm_conversion,
     prepare_scanner,
 )
+
+annotation_dir = Path(get_setting("annotation_dir"))
 
 other_gene_mapping = {
     "ARI5B": "ARID5B",
@@ -107,7 +147,7 @@ other_gene_mapping = {
 }
 
 
-def fix_gene_name(x: str):
+def fix_gene_name(x: str) -> str:
     if x.startswith("ZN") and not x.startswith("ZNF"):
         x = x.replace("ZN", "ZNF")
     if x.startswith("ZSC") and not x.startswith("ZSCAN"):
@@ -134,18 +174,53 @@ def fix_gene_name(x: str):
 
 
 class NrMotifV1(MotifClusterCollection):
-    """TFBS motif clusters defined in https://resources.altius.org/~jvierstra/projects/motif-clustering/releases/v1.0/."""
+    """
+    A collection of non-redundant transcription factor binding site motif clusters.
+
+    This class manages the motif clusters defined in the non-redundant motif collection v1.0.
+    It provides functionality to load, access, and work with motif clusters and individual motifs.
+
+    Parameters
+    ----------
+    motif_dir : str or Path
+        Directory where motif data will be stored
+    base_url : str, optional
+        URL to fetch motif data from, by default points to Altius Institute resources
+
+    Attributes
+    ----------
+    motif_dir : Path
+        Directory containing motif data
+    annotations : pandas.DataFrame
+        Motif annotation data
+    matrices : list
+        list of position frequency matrices
+    matrices_rc : list
+        list of reverse complement matrices
+    matrix_names : list
+        list of motif names
+    cluster_names : list
+        list of cluster names
+    motif_to_cluster : dict
+        Mapping from motif IDs to cluster names
+    cluster_gene_list : dict
+        Mapping from cluster names to associated genes
+
+    Notes
+    -----
+    The class automatically downloads required motif data if not present in the specified directory.
+    """
 
     def __init__(
         self,
-        motif_dir,
-        base_url="https://resources.altius.org/~jvierstra/projects/motif-clustering/releases/v1.0/",
-    ):
+        motif_dir: str | Path = annotation_dir / "nr_motif_v1",
+        base_url: str = "https://resources.altius.org/~jvierstra/projects/motif-clustering/releases/v1.0/",
+    ) -> None:
         super().__init__()
         self.motif_dir = Path(motif_dir)
-        self.annotations = self.get_motif_data(self.motif_dir, base_url)
-        matrices = []
-        matrices_rc = []
+        self.annotations: DataFrame = self.get_motif_data(self.motif_dir, base_url)
+        matrices: list = []
+        matrices_rc: list = []
         for motif in self.get_motif_list():
             filename = self.motif_dir / "pfm" / f"{motif}.pfm"
             valid = False
@@ -154,51 +229,123 @@ class NrMotifV1(MotifClusterCollection):
                 matrices.append(matrix)
                 matrices_rc.append(reverse_complement(matrix, 4))
 
-        self.matrices = matrices
-        self.matrices_all = self.matrices + matrices_rc
-        self.matrix_names = self.get_motif_list()
-        self.cluster_names = self.get_motifcluster_list()
-        self.motif_to_cluster = (
+        self.matrices: list = matrices
+        self.matrices_all: list = self.matrices + matrices_rc
+        self.matrix_names: list[str] = self.get_motif_list()
+        self.cluster_names: list[str] = self.get_motifcluster_list()
+        self.motif_to_cluster: dict[str, str] = (
             self.annotations[["Motif", "Name"]].set_index("Motif").to_dict()["Name"]
         )
-        self.cluster_gene_list = self.get_motifcluster_list_genes()
+        self.cluster_gene_list: dict[str, list[str]] = (
+            self.get_motifcluster_list_genes()
+        )
 
     # facility to export the instance as a pickle and load it back
-    def __getstate__(self):
+    def __getstate__(self) -> dict:
         state = self.__dict__.copy()
         return state
 
-    def __setstate__(self, state):
+    def __setstate__(self, state: dict) -> None:
         self.__dict__.update(state)
 
-    def save_to_pickle(self, file_path):
-        """Save the instance of the NrMotifV1 class to a pickle file."""
-        with Path.open(file_path, "wb") as f:
+    def save_to_pickle(
+        self, file_path: str | Path = annotation_dir / "nr_motif_v1.pkl"
+    ) -> None:
+        """
+        Serialize the NrMotifV1 instance to a pickle file.
+
+        Parameters
+        ----------
+        file_path : Path or str, optional
+            Path where the pickle file will be saved
+        """
+        with Path(file_path).open("wb") as f:
             pickle.dump(self.__getstate__(), f)
 
     @classmethod
-    def load_from_pickle(cls, file_path, motif_dir=None):
-        """Load the instance of the NrMotifV1 class from a pickle file."""
-        with Path.open(file_path, "rb") as f:
+    def load_from_pickle(
+        cls,
+        file_path: str | Path = annotation_dir / "nr_motif_v1.pkl",
+        motif_dir: str | Path | None = annotation_dir / "nr_motif_v1",
+    ) -> "NrMotifV1":
+        """
+        Load a NrMotifV1 instance from a pickle file.
+
+        Parameters
+        ----------
+        file_path : Path or str, optional
+            Path to the pickle file
+        motif_dir : Path or str, optional
+            Directory containing motif data
+
+        Returns
+        -------
+        NrMotifV1
+            Loaded instance of NrMotifV1
+
+        Notes
+        -----
+        Creates motif directory if it doesn't exist and downloads required data.
+        """
+        with Path(file_path).open("rb") as f:
             state = pd.read_pickle(f)
         instance = cls.__new__(cls)
         instance.__setstate__(state)
         if motif_dir is not None:
             instance.motif_dir = motif_dir
+            if (
+                not instance.motif_dir.exists()
+                or len(os.listdir(instance.motif_dir)) == 0
+            ):
+                # create the directory
+                instance.motif_dir.mkdir(parents=True, exist_ok=True)
+                instance.get_motif_data(motif_dir)
         return instance
 
-    def get_motif_data(self, motif_dir, base_url):
-        """Get motif clusters from the non-redundant motif v1.0 release."""
+    def get_motif_data(
+        self,
+        motif_dir: str | Path = annotation_dir / "nr_motif_v1",
+        base_url: str = "https://resources.altius.org/~jvierstra/projects/motif-clustering/releases/v1.0",
+    ) -> DataFrame:
+        """
+        Download and load motif data from the specified source.
+
+        Parameters
+        ----------
+        motif_dir : Path
+            Directory to store downloaded motif data
+        base_url : str
+            URL to fetch motif data from
+
+        Returns
+        -------
+        pandas.DataFrame
+            Motif annotations data
+
+        Notes
+        -----
+        Downloads PFM files if not present locally. Combines motif annotations from multiple sources.
+        """
         pfm_dir = motif_dir / "pfm"
-        if pfm_dir.exists():
+        if pfm_dir.exists() and pfm_dir.is_dir() and len(os.listdir(pfm_dir)) > 0:
             pass
         else:
+            pfm_dir.mkdir(parents=True, exist_ok=True)
             print("Downloading PFMs...")
             import subprocess
 
             subprocess.run(
-                ["wget", "--recursive", "--no-parent", f"{base_url}/pfm/"],
-                cwd=motif_dir,
+                [
+                    "wget",
+                    "--recursive",
+                    "--no-parent",
+                    "--cut-dirs=6",
+                    "-nH",
+                    "-P",
+                    ".",
+                    f"{base_url}/pfm/",
+                ],
+                cwd=str(pfm_dir),
             )
 
         annotations_file = motif_dir / "motif_annotations.csv"
@@ -213,11 +360,31 @@ class NrMotifV1(MotifClusterCollection):
             motif_annotations.to_csv(annotations_file, index=False)
         return motif_annotations
 
-    def get_motif_list(self):
-        """Get list of motifs."""
+    def get_motif_list(self) -> list[str]:
+        """
+        Get a sorted list of all motif IDs in the collection.
+
+        Returns
+        -------
+        list
+            Sorted list of motif IDs
+        """
         return sorted(self.annotations.Motif.unique())
 
-    def get_motif(self, motif_id):
+    def get_motif(self, motif_id: str) -> Motif:
+        """
+        Get a specific motif by its ID.
+
+        Parameters
+        ----------
+        motif_id : str
+            ID of the motif to retrieve
+
+        Returns
+        -------
+        Motif
+            Motif object containing ID, associated genes, DBD, database source, and other metadata
+        """
         row = self.annotations[self.annotations.Motif == motif_id].iloc[0]
         return Motif(
             row.Motif,
@@ -229,12 +396,19 @@ class NrMotifV1(MotifClusterCollection):
             self.motif_dir / "pfm" / f"{row.Motif}.pfm",
         )
 
-    def get_motifcluster_list(self):
-        """Get list of motif clusters."""
+    def get_motifcluster_list(self) -> list[str]:
+        """
+        Get a sorted list of all motif cluster names.
+
+        Returns
+        -------
+        list
+            Sorted list of motif cluster names
+        """
         return sorted(self.annotations.Name.unique())
 
-    def get_motifcluster_list_genes(self):
-        cluster_gene_list = {}
+    def get_motifcluster_list_genes(self) -> dict[str, list[str]]:
+        cluster_gene_list: dict[str, list[str]] = {}
         for c in self.get_motifcluster_list():
             for g in self.get_motif_cluster_by_name(c).get_gene_name_list():
                 if g.endswith("mouse"):
@@ -251,8 +425,20 @@ class NrMotifV1(MotifClusterCollection):
             cluster_gene_list[k] = [fix_gene_name(x) for x in cluster_gene_list[k]]
         return cluster_gene_list
 
-    def get_motif_cluster_by_name(self, mc_name):
-        """Get motif cluster by name."""
+    def get_motif_cluster_by_name(self, mc_name: str) -> MotifCluster:
+        """
+        Retrieve a motif cluster by its name.
+
+        Parameters
+        ----------
+        mc_name : str
+            Name of the motif cluster
+
+        Returns
+        -------
+        MotifCluster
+            Cluster object containing all associated motifs and metadata
+        """
         mc = MotifCluster()
         mc.name = mc_name
         mc.annotations = self.annotations[self.annotations.Name == mc_name]
@@ -265,13 +451,25 @@ class NrMotifV1(MotifClusterCollection):
             mc.motifs[motif_id] = self.get_motif(motif_id)
         return mc
 
-    def get_motif_cluster_by_id(self, mc_id):
-        """Get motif cluster by id."""
+    def get_motif_cluster_by_id(self, mc_id: str) -> MotifCluster:
+        """
+        Retrieve a motif cluster by its ID.
+
+        Parameters
+        ----------
+        mc_id : str
+            ID of the motif cluster
+
+        Returns
+        -------
+        MotifCluster
+            Cluster object containing all associated motifs and metadata
+        """
         mc = MotifCluster()
         mc.name = mc_id
         mc.annotations = self.annotations[self.annotations.Cluster_ID == mc_id]
-        mc.seed_motif = self.get_motif(mc.annotations.iloc[0].Seed_motif)
-        mc.name = mc.annotations.iloc[0].Name
+        mc.seed_motif = self.get_motif(self.annotations.iloc[0].Seed_motif)
+        mc.name = self.annotations.iloc[0].Name
 
         mc.motifs = MotifCollection()
         for motif_id in self.annotations[
@@ -281,6 +479,44 @@ class NrMotifV1(MotifClusterCollection):
         return mc
 
     @property
-    def scanner(self, bg=[2.977e-01, 2.023e-01, 2.023e-01, 2.977e-01]):
-        """Get MOODS scanner."""
+    def scanner(self, bg: list[float] = [2.977e-01, 2.023e-01, 2.023e-01, 2.977e-01]):
+        """
+        Get a MOODS scanner configured with the current motif matrices.
+
+        Parameters
+        ----------
+        bg : list, optional
+            Background nucleotide frequencies [A,C,G,T]
+
+        Returns
+        -------
+        MOODSScanner
+            Scanner object configured for motif searching
+
+        Notes
+        -----
+        Uses both forward and reverse complement matrices for comprehensive scanning.
+        """
         return prepare_scanner(self.matrices_all, bg)
+
+    def __repr__(self) -> str:
+        """
+        Return a string representation of the NrMotifV1 instance.
+
+        Returns
+        -------
+        str
+            A formatted string showing key information about the motif collection
+        """
+        n_motifs = len(self.matrix_names)
+        n_clusters = len(self.cluster_names)
+        n_matrices = len(self.matrices)
+
+        return (
+            f"NrMotifV1(\n"
+            f"    motifs: {n_motifs:,}\n"
+            f"    clusters: {n_clusters:,}\n"
+            f"    matrices: {n_matrices:,}\n"
+            f"    directory: {self.motif_dir}\n"
+            f")"
+        )

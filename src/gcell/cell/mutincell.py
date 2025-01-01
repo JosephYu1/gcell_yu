@@ -324,8 +324,7 @@ class CellMutCollection:
         end = (
             self.variant_muts.df.query(f'RSID=="{variant}"')["End"].values[0] + distance
         )
-        filename = f"https://gnomad-public-us-east-1.s3.amazonaws.com/release/4.0/vcf/genomes/gnomad.genomes.v4.0.sites.{
-            chrom}.vcf.bgz"
+        filename = f"https://gnomad-public-us-east-1.s3.amazonaws.com/release/4.0/vcf/genomes/gnomad.genomes.v4.0.sites.{chrom}.vcf.bgz"
         query = f"{chrom}:{start}-{end}"
         command = ["tabix", filename, query]
         result = subprocess.run(command, stdout=subprocess.PIPE)
@@ -446,7 +445,7 @@ class GETHydraCellMutCollection(CellMutCollection):
         Path(f"{self.output_dir}/logs").mkdir(parents=True, exist_ok=True)
 
     def setup_genome_and_motif(self):
-        self.genome = Genome("hg38", self.genome_path)
+        self.genome = Genome("hg38")
         self.motif = NrMotifV1.load_from_pickle(self.motif_path)
 
     def setup_variants(self):
