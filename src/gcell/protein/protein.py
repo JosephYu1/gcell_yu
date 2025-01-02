@@ -236,6 +236,14 @@ class Protein:
             sequences.append(s)
         return sequences
 
+    @property
+    def negative_charge_residue(self):
+        return np.isin(np.array(self.sequence), ["D", "E"])
+
+    @property
+    def positive_charge_residue(self):
+        return np.isin(np.array(self.sequence), ["R", "K", "H"])
+
     def get_final_score_gated_grad_3d(self, interaction_threshold=20):
         f = self.grad * self.esm
         pairwise_interaction = self.pairwise_distance < interaction_threshold

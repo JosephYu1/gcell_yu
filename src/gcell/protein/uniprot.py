@@ -1,8 +1,44 @@
+"""
+UniProt API Client
+=================
+
+A module providing a comprehensive interface to the UniProt API for protein-related data retrieval
+and XML downloads.
+
+Classes
+-------
+UniProtAPI
+    A class to interact with UniProt API for protein-related data retrieval and batch operations.
+
+Example
+-------
+.. code-block:: python
+
+    from gcell.protein.uniprot import UniProtAPI
+
+    # Initialize the client
+    client = UniProtAPI()
+
+    # Get protein sequence
+    sequence = client.get_protein_sequence("P12345")
+
+    # Download XML files for multiple genes
+    client.batch_download_xml(input_csv="genes.csv", output_dir="xml_files", max_workers=8)
+"""
+
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pandas as pd
 import requests
 from Bio.Seq import Seq
+
+from .._settings import get_setting
+
+
+def get_default_xml_dir() -> Path:
+    """Get the default directory for UniProt XML files from settings."""
+    return Path(get_setting("cache_dir")) / "uniprot_xml"
 
 
 class UniProtAPI:
@@ -208,3 +244,95 @@ class UniProtAPI:
         # Create DataFrame from TSV response
         df = pd.read_csv(pd.StringIO(response.text), sep="\t")
         return df
+
+    def download_xml(
+        self, uniprot_id: str, output_dir: str | Path | None = None
+    ) -> bool:
+        """
+        Download UniProt XML file for a given UniProt ID.
+
+        Parameters
+        ----------
+        uniprot_id : str
+            UniProt identifier
+        output_dir : str or Path or None, optional
+            Directory where XML files will be saved (default: cache_dir/uniprot_xml)
+
+        Returns
+        -------
+        bool
+            True if download was successful, False otherwise
+        """
+        output_dir = get_default_xml_dir() if output_dir is None else Path(output_dir)
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            response = requests.get(f"https://www.uniprot.org/uniprot/{uniprot_id}.xml")
+            response.raise_for_status()
+            output_file = output_dir / f"{uniprot_id}.xml"
+            output_file.write_bytes(response.content)
+            print(f"Successfully downloaded {uniprot_id}.xml")
+            return True
+        except Exception as e:
+            print(f"Failed to download {uniprot_id}.xml: {str(e)}")
+            return False
+
+    def batch_download_xml(
+        self,
+        input_csv: str | Path,
+        output_dir: str | Path | None = None,
+        max_workers: int = 16,
+    ) -> None:
+        """
+        Download UniProt XML files in batch for a list of gene names.
+
+        Parameters
+        ----------
+        input_csv : str or Path
+            Path to input CSV file containing gene names (one per line)
+        output_dir : str or Path or None, optional
+            Directory where XML files will be saved (default: cache_dir/uniprot_xml)
+        max_workers : int, optional
+            Number of parallel download workers (default: 16)
+
+        Notes
+        -----
+        The input CSV file should contain one gene name per line without a header.
+        The function will automatically map gene names to UniProt IDs and download
+        the corresponding XML files.
+
+        Example
+        -------
+        .. code-block:: python
+
+            client = UniProtAPI()
+            client.batch_download_xml(
+                input_csv="genes.csv", output_dir="xml_files", max_workers=8
+            )
+        """
+        output_dir = get_default_xml_dir() if output_dir is None else Path(output_dir)
+
+        from .data import get_uniprot_from_gene_name
+
+        # Load target list from CSV file
+        target_list = pd.read_csv(input_csv, header=None).iloc[:, 0].tolist()
+
+        # Get gene name to UniProt ID mapping
+        genename_to_uniprot = get_uniprot_from_gene_name()
+
+        def process_target(gene_name: str) -> None:
+            """Process a single target gene and download its UniProt XML file."""
+            if gene_name in genename_to_uniprot:
+                uniprot_id = genename_to_uniprot[gene_name]
+                self.download_xml(uniprot_id, output_dir)
+            else:
+                print(f"UniProt ID for {gene_name} not found")
+
+        # Download XML files in parallel
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [
+                executor.submit(process_target, gene_name) for gene_name in target_list
+            ]
+            for future in futures:
+                future.result()
