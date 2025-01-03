@@ -1084,7 +1084,7 @@ class GETHydraCellType(Celltype):
         Number of features
     """
 
-    def __init__(self, celltype, zarr_path):
+    def __init__(self, celltype, zarr_path, prediction_target="exp"):
         # Initialize parent class attributes that will be needed
         self._gene_by_motif = None
         self.celltype = celltype
@@ -1093,14 +1093,14 @@ class GETHydraCellType(Celltype):
         self.motif = NrMotifV1.load_from_pickle()
         self.assets_dir = "assets"  # Default value, could be made configurable
         self.s3_file_sys = None  # Default value, could be made configurable
-
+        self.prediction_target = prediction_target
         self._load_zarr_data()
 
         # Initialize parent class attributes
         self.features = list(self.motif.cluster_names) + ["Accessibility"]
         self.num_features = len(self.features)
         self.num_region_per_sample = self._zarr_data["input"].shape[1]
-        self.num_cls = self._zarr_data["preds"]["exp"].shape[2]
+        self.num_cls = self._zarr_data["preds"][self.prediction_target].shape[2]
 
         self._process_data()
 
@@ -1131,13 +1131,13 @@ class GETHydraCellType(Celltype):
         # Get predictions and observations for all genes at once
         pred_values = np.array(
             [
-                self._zarr_data["preds"]["exp"][i, focus_idx, strand]
+                self._zarr_data["preds"][self.prediction_target][i, focus_idx, strand]
                 for i, strand in enumerate(strands)
             ]
         )
         obs_values = np.array(
             [
-                self._zarr_data["obs"]["exp"][i, focus_idx, strand]
+                self._zarr_data["obs"][self.prediction_target][i, focus_idx, strand]
                 for i, strand in enumerate(strands)
             ]
         )
@@ -1183,7 +1183,9 @@ class GETHydraCellType(Celltype):
 
         jacobians = []
         for i in indices:
-            jacob = self._zarr_data["jacobians"]["exp"][str(strand)]["input"][i]
+            jacob = self._zarr_data["jacobians"][self.prediction_target][str(strand)][
+                "input"
+            ][i]
             input_data = self._zarr_data["input"][i]
 
             if multiply_input:
