@@ -48,7 +48,6 @@ dependencies = [
     "pyarrow",
     "pooch",
     "gradio",
-    "dash-bio",
 ]
 dynamic = ["version"]
 
@@ -82,6 +81,7 @@ dev = [
 ]
 demo = [
     "nglview",
+    "dash-bio",
     "py3Dmol",
 ]
 doc = [
