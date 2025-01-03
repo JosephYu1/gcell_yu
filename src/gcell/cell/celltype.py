@@ -1100,8 +1100,10 @@ class GETHydraCellType(Celltype):
         self.features = list(self.motif.cluster_names) + ["Accessibility"]
         self.num_features = len(self.features)
         self.num_region_per_sample = self._zarr_data["input"].shape[1]
-        self.num_cls = self._zarr_data["preds"][self.prediction_target].shape[2]
-
+        if len(self._zarr_data["preds"][self.prediction_target].shape) == 3:
+            self.num_cls = self._zarr_data["preds"][self.prediction_target].shape[2]
+        else:
+            self.num_cls = 1
         self._process_data()
 
         # Process jacobians if available
