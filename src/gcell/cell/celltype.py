@@ -1222,7 +1222,7 @@ class GETHydraCellType(Celltype):
 
     # class method create from config
     @classmethod
-    def from_config(cls, cfg, celltype=None, zarr_path=None):
+    def from_config(cls, cfg, celltype=None, zarr_path=None, prediction_target=None):
         """
         Create instance from configuration.
 
@@ -1234,8 +1234,8 @@ class GETHydraCellType(Celltype):
             Cell type name
         zarr_path : str, optional
             Path to zarr data
-        motif_path : str, optional
-            Path to motif data
+        prediction_target : str, optional
+            Prediction target. Default is the first loss component in the model.
 
         Returns
         -------
@@ -1249,7 +1249,13 @@ class GETHydraCellType(Celltype):
         logger.info(
             f"Creating GETHydraCellType instance for {celltype}, loading data from {zarr_path}"
         )
-        return cls(celltype=celltype, zarr_path=zarr_path)
+        if prediction_target is None:
+            prediction_target = list(cfg.model.cfg.loss.components.keys())[0]
+        return cls(
+            celltype=celltype,
+            zarr_path=zarr_path,
+            prediction_target=prediction_target,
+        )
 
     def get_gene_by_motif(self, overwrite: bool = False):
         """
