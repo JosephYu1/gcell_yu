@@ -24,7 +24,6 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import pandas as pd
-import pkg_resources
 import plotly.graph_objects as go
 import seaborn as sns
 import zarr
@@ -1070,8 +1069,6 @@ class GETHydraCellType(Celltype):
         Name/identifier of the cell type
     zarr_path : str
         Path to zarr data
-    motif_path : str
-        Path to motif data file
 
     Attributes
     ----------
@@ -1087,13 +1084,13 @@ class GETHydraCellType(Celltype):
         Number of features
     """
 
-    def __init__(self, celltype, zarr_path, motif_path):
+    def __init__(self, celltype, zarr_path):
         # Initialize parent class attributes that will be needed
         self._gene_by_motif = None
         self.celltype = celltype
         self.celltype_name = celltype
         self.zarr_path = zarr_path
-        self.motif = NrMotifV1.load_from_pickle(motif_path)
+        self.motif = NrMotifV1.load_from_pickle()
         self.assets_dir = "assets"  # Default value, could be made configurable
         self.s3_file_sys = None  # Default value, could be made configurable
 
@@ -1223,7 +1220,7 @@ class GETHydraCellType(Celltype):
 
     # class method create from config
     @classmethod
-    def from_config(cls, cfg, celltype=None, zarr_path=None, motif_path=None):
+    def from_config(cls, cfg, celltype=None, zarr_path=None):
         """
         Create instance from configuration.
 
@@ -1247,12 +1244,10 @@ class GETHydraCellType(Celltype):
             celltype = f"{cfg.dataset.leave_out_celltypes}"
         if zarr_path is None:
             zarr_path = f"{cfg.machine.output_dir}/{cfg.run.project_name}/{cfg.run.run_name}/{cfg.run.run_name}.zarr"
-        if motif_path is None:
-            motif_path = pkg_resources.resource_filename("gcell", "data/NrMotifV1.pkl")
         logger.info(
             f"Creating GETHydraCellType instance for {celltype}, loading data from {zarr_path}"
         )
-        return cls(celltype=celltype, zarr_path=zarr_path, motif_path=motif_path)
+        return cls(celltype=celltype, zarr_path=zarr_path)
 
     def get_gene_by_motif(self, overwrite: bool = False):
         """
