@@ -46,7 +46,6 @@ dependencies = [
     "zarr",
     "lingam",
     "pyarrow",
-    "hydra-zen",
     "pooch",
     "gradio",
     "dash-bio",

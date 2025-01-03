@@ -46,9 +46,7 @@ from ..utils.s3 import (
     path_exists_with_s3,
 )
 
-motif = NrMotifV1.load_from_pickle(
-    pkg_resources.resource_filename("gcell", "data/NrMotifV1.pkl")
-)
+motif = NrMotifV1.load_from_pickle()
 motif_clusters = motif.cluster_names
 
 # Load gencode_hg38 from feather file
