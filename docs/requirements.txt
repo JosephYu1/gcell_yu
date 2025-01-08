@@ -1,0 +1,18 @@
+sphinx>=7
+sphinx-book-theme>=1.1.0
+scanpydoc>=0.14.1
+sphinx-autodoc-typehints>=1.25.2
+myst-parser>=2
+myst-nb>=1.1.2
+sphinx-design
+sphinx-tabs
+readthedocs-sphinx-search
+sphinxext-opengraph # for nice cards when sharing on social
+sphinx-copybutton
+nbsphinx>=0.9
+ipython>=7.20  # for nbsphinx code highlighting
+matplotlib!=3.6.1
+sphinxcontrib-bibtex
+setuptools  # undeclared dependency of sphinxcontrib-bibtex→pybtex
+gcell @ git+https://github.com/fuxialexander/gcell.git@main
+towncrier
