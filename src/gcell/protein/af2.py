@@ -375,8 +375,8 @@ class AFPairseg:
             seg2 = int(pair_name.split("_")[3])
             range1 = self.protein1.low_or_high_plddt_region[seg1]
             range2 = self.protein2.low_or_high_plddt_region[seg2]
-            pair_fasta = Path(self.fasta_root_dir) / f"{pair_name}.fasta"
-            res = AFResult(pair_dir, str(pair_fasta), self.s3_file_sys)
+            pair_fasta = f"{self.fasta_root_dir}/{pair_name}.fasta"
+            res = AFResult(pair_dir, pair_fasta, self.s3_file_sys)
             pairs[pair_name] = res
             score["mean_plddt"][seg1, seg2] = res.mean_plddt
             score["max_pae"][seg1, seg2] = res.max_pae

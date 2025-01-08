@@ -1,3 +1,8 @@
+s3_uri: "s3://2023-get-xf2217/get_demo"
+share: false
+port: 7860
+host: "127.0.0.1"
+s3_file_sys: NULL
 celltype:
   features: "NrMotifV1"
   num_region_per_sample: 200
@@ -9,4 +14,3 @@ celltype:
   assets_dir: '.'
   motif_dir: '.'
   num_cls: 2
-s3_file_sys: NULL

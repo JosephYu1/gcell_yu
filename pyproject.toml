@@ -28,6 +28,7 @@ dependencies = [
     "genomespy",
     "gprofiler-official",
     "gradio",
+    "hydra-core",
     "lingam",
     "matplotlib",
     "MOODS-python",
