@@ -1,5 +1,5 @@
 ```{eval-rst}
-.. module:: gcell.cell
+.. module:: gcell.cell.celltype
 ```
 
 # Celltype Module API Documentation
@@ -17,9 +17,9 @@ This document provides an overview of the `celltype.py` module, which is used fo
    :nosignatures:
    :toctree: ../generated/
 
-   Celltype
-   GETCellType
-   GETHydraCellType
+   gcell.cell.celltype.Celltype
+   gcell.cell.celltype.GETCellType
+   gcell.cell.celltype.GETHydraCellType
 ```
 
 ### Celltype
@@ -77,6 +77,6 @@ This document provides an overview of the `celltype.py` module, which is used fo
 
 ## Usage
 
-The `celltype.py` module is designed to be used in genomic data analysis pipelines where cell type-specific analysis is required. It provides a comprehensive set of tools for analyzing gene expression, motif relationships, and causal interactions in genomic data.
+This module is designed to be used in genomic data analysis pipelines where cell type-specific analysis is required. It provides a comprehensive set of tools for analyzing gene expression, motif relationships, and causal interactions in genomic data.
 
 For more detailed usage examples, refer to the tutorials and examples provided in the documentation.
