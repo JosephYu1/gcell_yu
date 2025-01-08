@@ -1,5 +1,7 @@
 # gcell
 
+[![Documentation Status](https://readthedocs.org/projects/gcell/badge/?version=latest)](https://gcell.readthedocs.io/en/latest/)
+
 `gcell` is a comprehensive toolkit for genomic data analysis, focusing on cell type-specific regulatory analysis, DNA and RNA sequence manipulation, protein structure prediction, and pathway analysis. It integrates various modules to facilitate the study of different aspects of gene expression regulation.
 
 ## Goal
