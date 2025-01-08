@@ -267,8 +267,9 @@ class LiNGAM(GraphModel):
 
         try:
             data.to_csv(run_dir / "data.csv", header=False, index=False)
+            template_path = Path(__file__).parent / "lingam.r"
             lingam_result = launch_R_script(
-                Path("/home/xf2217/Projects/gcell/src/gcell/utils/lingam.r"),
+                template_path,
                 self.arguments,
                 output_function=retrieve_result,
                 verbose=verbose,
