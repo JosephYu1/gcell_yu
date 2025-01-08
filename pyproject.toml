@@ -104,6 +104,7 @@ doc = [
     "matplotlib!=3.6.1",
     "sphinxcontrib-bibtex",
     "setuptools", # undeclared dependency of sphinxcontrib-bibtex→pybtex
+    "towncrier",
 ]
 gpu = [
     #"esm",
