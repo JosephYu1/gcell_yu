@@ -5,7 +5,7 @@ To use `gcell` from another project, install it using your favourite environment
 ::::{tabs}
 
 :::{group-tab} Hatch (recommended)
-Adding `gcell` to your dependencies is enough.
+Adding `"gcell @ git+https://github.com/fuxialexander/gcell.git@main"` to your dependencies is enough.
 See below for how to use gcell’s {ref}`dev-install-instructions`.
 :::
 
@@ -13,13 +13,12 @@ See below for how to use gcell’s {ref}`dev-install-instructions`.
 If you prefer to exclusively use PyPI run:
 
 ```console
-$ pip install 'gcell'
+$ pip install git+https://github.com/GET-Foundation/gcell.git@main
 ```
 :::
 
 
-[miniconda]: https://docs.anaconda.com/miniconda/miniconda-install/
-[from pypi]: https://pypi.org/project/gcell
+
 :::
 
 ::::

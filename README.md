@@ -18,7 +18,7 @@ The long term goal of this package is to create a open-source, community-involve
 ## Installation
 
 ```
-pip install gcell
+pip install git+https://github.com/GET-Foundation/gcell.git@main
 ```
 
 ## License
