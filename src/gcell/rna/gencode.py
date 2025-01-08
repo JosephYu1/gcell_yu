@@ -1,3 +1,12 @@
+"""
+Module for handling GENCODE gene annotations.
+
+Classes
+-------
+Gencode: A class to handle GENCODE gene annotations for different genome assemblies.
+
+"""
+
 from pathlib import Path
 
 import pandas as pd
@@ -16,20 +25,6 @@ class Gencode(GTF):
     The class inherits from GTF and provides convenient methods to access gene
     information like strand, chromosome location, transcription start sites, etc.
 
-    Args:
-        assembly (str, optional): Genome assembly version. Options: "hg38" (human),
-            "mm10" (mouse), or "hg19" (human). Defaults to "hg38".
-        version (int, optional): GENCODE release version. Defaults to 40.
-        exclude_chrs (list, optional): Chromosomes to exclude from the annotation.
-            Defaults to ["chrM", "chrY"].
-
-    Attributes:
-        assembly (str): Genome assembly version
-        version (int): GENCODE version number
-        gtf_dir (Path): Directory containing GTF files
-        gtf (pd.DataFrame): Parsed GTF data
-        gtf_path (Path): Path to the GTF file
-        feather_file (Path): Path to cached feather format file
     """
 
     @classmethod
@@ -49,6 +44,17 @@ class Gencode(GTF):
         )
 
     def __init__(self, assembly="hg38", version=40, exclude_chrs=["chrM", "chrY"]):
+        """Initialize the Gencode class.
+
+        Parameters
+        ----------
+        assembly : str
+            Genome assembly version. Options: "hg38" (human), "mm10" (mouse), or "hg19" (human). Defaults to "hg38".
+        version : int
+            GENCODE release version. Defaults to 40.
+        exclude_chrs : list
+            Chromosomes to exclude from the annotation. Defaults to ["chrM", "chrY"].
+        """
         self.assembly = assembly
         self.version = version
         self.gtf_dir = Path(_settings.get_setting("annotation_dir"))

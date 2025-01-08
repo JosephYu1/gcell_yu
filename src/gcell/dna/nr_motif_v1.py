@@ -187,25 +187,6 @@ class NrMotifV1(MotifClusterCollection):
     base_url : str, optional
         URL to fetch motif data from, by default points to Altius Institute resources
 
-    Attributes
-    ----------
-    motif_dir : Path
-        Directory containing motif data
-    annotations : pandas.DataFrame
-        Motif annotation data
-    matrices : list
-        list of position frequency matrices
-    matrices_rc : list
-        list of reverse complement matrices
-    matrix_names : list
-        list of motif names
-    cluster_names : list
-        list of cluster names
-    motif_to_cluster : dict
-        Mapping from motif IDs to cluster names
-    cluster_gene_list : dict
-        Mapping from cluster names to associated genes
-
     Notes
     -----
     The class automatically downloads required motif data if not present in the specified directory.

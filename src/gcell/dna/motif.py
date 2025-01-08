@@ -1,18 +1,50 @@
+"""
+Motif module for handling transcription factor binding site (TFBS) motifs.
+
+This module provides base classes and functions for working with TFBS motifs, including
+parsing PFM files, scanning sequences for motifs, and plotting sequence logos.
+
+Classes
+-------
+Motif: Represents a single TFBS motif
+MotifCluster: Represents a cluster of TFBS motifs
+MotifCollection: A collection of TFBS motifs
+
+Functions
+---------
+pfm_conversion: Convert a PFM file to log-odds matrices
+print_results: Print the results of a motif scan
+prepare_scanner: Prepare a scanner for scanning motifs
+"""
+
 import numpy as np
 import pandas as pd
 import seqlogo
-
-try:
-    from MOODS.parsers import pfm_to_log_odds
-    from MOODS.scan import Scanner
-    from MOODS.tools import threshold_from_p_with_precision
-except ImportError:
-    print("MOODS not installed. Please install MOODS to use the scan_motif function.")
+from MOODS.parsers import pfm_to_log_odds
+from MOODS.scan import Scanner
+from MOODS.tools import threshold_from_p_with_precision
 
 
 def pfm_conversion(
     filename, lo_bg=[2.977e-01, 2.023e-01, 2.023e-01, 2.977e-01], ps=0.01
 ):
+    """
+    Convert a PFM file to log-odds matrices.
+
+    Parameters
+    ----------
+    filename : str
+        The path to the PFM file
+    lo_bg : list, optional
+        The background frequencies for the log-odds matrices, defaults to [0.2977, 0.2023, 0.2023, 0.2977]
+    ps : float, optional
+        The precision for the threshold, defaults to 0.01
+
+    Returns
+    -------
+    bool, list
+        Whether the conversion was successful and the log-odds matrices
+    """
     mat = pfm_to_log_odds(str(filename), lo_bg, ps)
     if len(mat) != 4:
         return False, mat
@@ -21,6 +53,22 @@ def pfm_conversion(
 
 
 def print_results(header, seq, matrices, matrix_names, results):
+    """
+    Print the results of a motif scan.
+
+    Parameters
+    ----------
+    header : str
+        The header of the sequence
+    seq : str
+        The sequence to scan
+    matrices : list
+        The log-odds matrices to use for the scan
+    matrix_names : list
+        The names of the matrices
+    results : list
+        The results of the scan
+    """
     # split results into forward and reverse strands
     fr = results[: len(matrix_names)]
     rr = results[len(matrix_names) :]
@@ -52,17 +100,14 @@ def print_results(header, seq, matrices, matrix_names, results):
 def prepare_scanner(matrices_all, bg=[2.977e-01, 2.023e-01, 2.023e-01, 2.977e-01]):
     """
     Prepare scanner for scanning motif.
+
+    Parameters
+    ----------
+    matrices_all : list
+        The log-odds matrices to use for the scan
+    bg : list, optional
+        The background frequencies for the log-odds matrices, defaults to [0.2977, 0.2023, 0.2023, 0.2977]
     """
-    bgs = {}
-    thresholds = {}
-    # for i in [chr]:
-    #     print(i)
-    #     if bg is not None:
-    #         bgs[i] = bg
-    # else:
-    # bgs[i] = MOODS.tools.bg_from_sequence_dna(genome.get_sequence(chr), 1, 100000)
-    # thresholds = {chr: [MOODS.tools.threshold_from_p_with_precision(
-    # m, bgs[chr], 0.0001, 200, 4) for m in matrices_all] for chr in bgs}
     scanner = Scanner(7)
     scanner.set_motifs(
         matrices_all,
@@ -73,9 +118,36 @@ def prepare_scanner(matrices_all, bg=[2.977e-01, 2.023e-01, 2.023e-01, 2.977e-01
 
 
 class Motif:
-    """Base class for TFBS motifs."""
+    """Base class for TFBS motifs.
 
-    def __init__(self, id, gene_name, dbd, database, cluster_id, cluster_name, pfm):
+    Parameters
+    ----------
+    id
+        The ID of the motif
+    gene_name
+        The name of the gene
+    dbd
+        The DNA binding domain of the motif
+    database
+        The database the motif is from
+    cluster_id
+        The ID of the cluster the motif is in
+    cluster_name
+        The name of the cluster the motif is in
+    pfm
+        The path to the PFM file
+    """
+
+    def __init__(
+        self,
+        id: str,
+        gene_name: str,
+        dbd: str,
+        database: str,
+        cluster_id: str,
+        cluster_name: str,
+        pfm: str,
+    ):
         self.id = id
         self.gene_name = gene_name
         self.dbd = dbd
@@ -105,7 +177,43 @@ class Motif:
         logo_title="",
         fineprint="",
     ):
-        """plot seqlogo of motif using pfm file"""
+        """plot seqlogo of motif using pfm file
+
+        Parameters
+        ----------
+        filename : str, optional
+            The path to the file to save the logo, defaults to None
+        format : str, optional
+            The format to save the logo, defaults to "png"
+        size : str, optional
+            The size of the logo, defaults to "large"
+        ic_scale : bool, optional
+            Whether to scale the information content, defaults to True
+        ic_ref : float, optional
+            The reference information content, defaults to 0.2
+        ylabel : str, optional
+            The label for the y-axis, defaults to ""
+        show_xaxis : bool, optional
+            Whether to show the x-axis, defaults to False
+        show_yaxis : bool, optional
+            Whether to show the y-axis, defaults to False
+        show_ends : bool, optional
+            Whether to show the ends, defaults to False
+        rotate_numbers : bool, optional
+            Whether to rotate the numbers, defaults to False
+        color_scheme : str, optional
+            The color scheme to use, defaults to "classic"
+        logo_title : str, optional
+            The title of the logo, defaults to ""
+        fineprint : str, optional
+            The fineprint to add to the logo, defaults to ""
+
+        Notes
+        -----
+        If logo_title is "id", the cluster ID will be used as the title.
+
+        For more detailed documentation, see http://weblogo.threeplusone.com/manual.html
+        """
         if logo_title == "id":
             logo_title = self.cluster_id
         return seqlogo.seqlogo(
@@ -127,7 +235,21 @@ class Motif:
 
 
 class MotifCluster:
-    """Base class for TFBS motif clusters."""
+    """Base class for TFBS motif clusters.
+
+    Parameters
+    ----------
+    id
+        The ID of the motif cluster
+    name
+        The name of the motif cluster
+    seed_motif
+        The ID of the seed motif
+    motifs
+        The motifs in the cluster
+    annotations
+        The annotations for the motif cluster
+    """
 
     def __init__(self):
         self.id = None
@@ -140,12 +262,18 @@ class MotifCluster:
         return f"MotifCluster(id={self.id}, name={self.name}, seed_motif={self.seed_motif})"
 
     def get_gene_name_list(self):
-        """Get list of gene names."""
+        """Get list of gene names for TFs in the motif cluster"""
         return np.concatenate([motif.gene_name for motif in self.motifs.values()])
 
 
 class MotifClusterCollection:
-    """List of TFBS motif clusters."""
+    """List of TFBS motif clusters.
+
+    Properties
+    ----------
+    annotations : pd.DataFrame
+        The annotations for the motif clusters
+    """
 
     def __init__(self):
         super().__init__()

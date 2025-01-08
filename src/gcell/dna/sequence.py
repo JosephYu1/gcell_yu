@@ -1,3 +1,16 @@
+"""
+DNA sequence manipulation and analysis module.
+
+This module provides classes for working with DNA sequences, including one-hot encoding,
+mutation analysis, and various file format conversions. It supports operations like
+reverse complement generation, sequence padding, and motif scanning.
+
+Classes
+-------
+DNASequence: A class for manipulating individual DNA sequences
+DNASequenceCollection: A class for working with collections of DNA sequences
+"""
+
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -12,24 +25,12 @@ from tqdm import tqdm
 
 from .motif import MotifCollection, print_results
 
-"""
-DNA sequence manipulation and analysis module.
-
-This module provides classes for working with DNA sequences, including one-hot encoding,
-mutation analysis, and various file format conversions. It supports operations like
-reverse complement generation, sequence padding, and motif scanning.
-
-Classes:
-    DNASequence: A class for manipulating individual DNA sequences
-    DNASequenceCollection: A class for working with collections of DNA sequences
-"""
-
 
 class DNASequence(Seq):
     """
     A class for representing and manipulating DNA sequences.
 
-    This class extends Bio.Seq.Seq with additional functionality for DNA sequence
+    This class extends Seq with additional functionality for DNA sequence
     manipulation, including one-hot encoding, padding, and mutation operations.
 
     Parameters
@@ -39,14 +40,6 @@ class DNASequence(Seq):
     header : str, optional
         Identifier or description for the sequence (default: "")
 
-    Attributes
-    ----------
-    header : str
-        Sequence identifier or description
-    seq : str
-        The DNA sequence in uppercase
-    one_hot_encoding : dict
-        Dictionary mapping nucleotides to their one-hot encoded vectors
     """
 
     def __init__(self, seq: str, header: str = "") -> None:
@@ -222,10 +215,7 @@ class DNASequenceCollection:
     sequences : list
         List of Bio.SeqRecord objects or DNASequence objects
 
-    Attributes
-    ----------
-    sequences : list
-        The collection of sequence objects
+
     """
 
     def __init__(self, sequences: list[SeqIO.SeqRecord]) -> None:

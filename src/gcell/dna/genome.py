@@ -5,17 +5,19 @@ This module provides classes and functions for working with genomic sequences,
 regions, and annotations. It includes functionality for downloading genome files,
 accessing sequences, and manipulating genomic regions.
 
-Classes:
-    ChromSize: Handles chromosome size information
-    ChromGap: Handles chromosome gap information
-    Genome: Main class for genome sequence access and manipulation
-    GenomicRegion: Represents a single genomic region
-    GenomicRegionCollection: Collection of genomic regions with operations
+Classes
+-------
+ChromSize: Handles chromosome size information
+ChromGap: Handles chromosome gap information
+Genome: Main class for genome sequence access and manipulation
+GenomicRegion: Represents a single genomic region
+GenomicRegionCollection: Collection of genomic regions with operations
 
-Functions:
-    read_peaks: Read peak files in BED or narrowPeak format
-    read_blacklist: Read ENCODE blacklist regions
-    pandas_to_tabix_region: Convert pandas DataFrame to tabix region string
+Functions
+---------
+read_peaks: Read peak files in BED or narrowPeak format
+read_blacklist: Read ENCODE blacklist regions
+pandas_to_tabix_region: Convert pandas DataFrame to tabix region string
 """
 
 import gzip
@@ -49,15 +51,6 @@ class ChromSize:
         Genome assembly name (e.g. 'hg38', 'mm10')
     annotation_dir : str or Path, optional
         Directory to store annotation files
-
-    Attributes
-    ----------
-    assembly : str
-        Genome assembly name
-    annotation_dir : Path
-        Directory containing annotation files
-    chrom_sizes : dict
-        Dictionary mapping chromosome names to sizes
 
     Methods
     -------
@@ -99,6 +92,19 @@ class ChromSize:
         return chrom_sizes
 
     def get_dict(self, chr_included=None):
+        """
+        Get chromosome sizes as dictionary.
+
+        Parameters
+        ----------
+        chr_included : list, optional
+            List of chromosome names to include, defaults to all chromosomes
+
+        Returns
+        -------
+        dict
+            Dictionary of chromosome sizes
+        """
         if chr_included is None:
             return self.chrom_sizes
         else:
@@ -106,9 +112,15 @@ class ChromSize:
 
     @property
     def dict(self):
+        """
+        Get chromosome sizes as dictionary
+        """
         return self.chrom_sizes
 
     def save_chrom_sizes(self):
+        """
+        Save chromosome sizes to tab-delimited file
+        """
         filepath = self.annotation_dir / f"{self.assembly}_chrom_sizes.txt"
         filepath.write_text(
             "\n".join(
@@ -117,6 +129,9 @@ class ChromSize:
         )
 
     def parse_or_download_chrom_sizes(self):
+        """
+        Parse or download chromosome sizes
+        """
         filepath = self.annotation_dir / f"{self.assembly}_chrom_sizes.txt"
         if filepath.exists():
             return self._parse_chrom_data(filepath.read_text())
@@ -124,6 +139,9 @@ class ChromSize:
             return self._download_chrom_sizes()
 
     def as_pyranges(self):
+        """
+        Convert chromosome sizes to PyRanges format
+        """
         try:
             import pyranges as pr
 
@@ -144,6 +162,21 @@ class ChromSize:
         )
 
     def tiling_region(self, tile_size: int, tile_overlap: int = 0):
+        """
+        Create tiled regions across chromosomes
+
+        Parameters
+        ----------
+        tile_size : int
+            The size of the tile
+        tile_overlap : int, optional
+            The overlap between tiles, defaults to 0
+
+        Returns
+        -------
+        pandas.DataFrame
+            DataFrame of tiled regions
+        """
         pr_regions = self.as_pyranges()
         return pr_regions.tile(size=tile_size, overlap=tile_overlap).as_df()
 
@@ -162,14 +195,6 @@ class ChromGap:
     annotation_dir : str or Path, optional
         Directory to store annotation files
 
-    Attributes
-    ----------
-    assembly : str
-        Genome assembly name
-    annotation_dir : Path
-        Directory containing annotation files
-    agp_data : pandas.DataFrame
-        AGP data containing gap annotations
 
     Methods
     -------
@@ -200,6 +225,9 @@ class ChromGap:
         return gzip.decompress(response.content).decode("utf-8")
 
     def _parse_agp_data(self, data):
+        """
+        Parse AGP data
+        """
         columns = [
             "chrom",
             "start",
@@ -214,12 +242,28 @@ class ChromGap:
         return pd.read_csv(StringIO(data), sep="\t", comment="#", names=columns)
 
     def get_telomeres(self, return_tabix=False):
+        """
+        Get telomere regions
+
+        Parameters
+        ----------
+        return_tabix : bool, optional
+            Whether to return the regions in tabix format string (i.e. "chr1:100-200"), defaults to False
+        """
         df = self.agp_data[self.agp_data["component_start"] == "telomere"]
         if return_tabix:
             return pandas_to_tabix_region(df)
         return df
 
     def get_heterochromatin(self, return_tabix=False):
+        """
+        Get heterochromatin regions
+
+        Parameters
+        ----------
+        return_tabix : bool, optional
+            Whether to return the regions in tabix format string (i.e. "chr1:100-200"), defaults to False
+        """
         df = self.agp_data[
             self.agp_data["component_start"].isin(["heterochromatin", "centromere"])
         ]
@@ -228,10 +272,16 @@ class ChromGap:
         return df
 
     def save_agp_data(self):
+        """
+        Save AGP data to file
+        """
         filepath = self.annotation_dir / f"{self.assembly}_agp.txt"
         self.agp_data.to_csv(filepath, sep="\t", index=False)
 
     def parse_or_download_agp(self):
+        """
+        Parse or download AGP data
+        """
         filepath = self.annotation_dir / f"{self.assembly}_agp.txt"
         if filepath.exists():
             return pd.read_csv(filepath, sep="\t")
@@ -260,14 +310,7 @@ class Genome:
     assembly : str
         Genome assembly name (e.g. 'hg38', 'mm10')
 
-    Attributes
-    ----------
-    assembly : str
-        Genome assembly name
-    genome_seq : pyfaidx.Fasta
-        Genome sequence accessor
-    chr_suffix : str
-        Chromosome name prefix ('chr' or '')
+
 
     Methods
     -------
@@ -324,7 +367,12 @@ class Genome:
             return pd.DataFrame()
 
     def _download_files_if_not_exist(self) -> None:
-        """Download genome files if they don't exist"""
+        """Download genome files if they don't exist. This will download:
+        - genome sequence
+        - chromosome sizes
+        - chromosome gap
+        - blacklist
+        """
         fasta_file = Path(_settings.get_setting("genome_dir")) / f"{self.assembly}.fa"
         if not fasta_file.exists():
             # Define file name and URL
@@ -408,7 +456,12 @@ class Genome:
 
     def normalize_chromosome(self, chromosome):
         """
-        Normalize chromosome name
+        Normalize chromosome name to use the specified chromosome suffix {self.chr_suffix}
+
+        Parameters
+        ----------
+        chromosome : str
+            The chromosome name
         """
         if str(chromosome).startswith("chr"):
             chromosome = str(chromosome)[3:]
@@ -418,6 +471,17 @@ class Genome:
     def get_sequence(self, chromosome, start, end, strand="+"):
         """
         Get the sequence of the genomic region
+
+        Parameters
+        ----------
+        chromosome : str
+            The chromosome name
+        start : int
+            The start position (0-based)
+        end : int
+            The end position (exclusive)
+        strand : str, optional
+            The strand ('+' or '-'), defaults to '+'
         """
         chromosome = self.normalize_chromosome(chromosome)
         if end > self.chrom_sizes[chromosome]:
@@ -446,6 +510,15 @@ class Genome:
     def random_draw(self, chromosome, length=4_000_000, strand="+"):
         """
         Randomly draw a genomic region with given length
+
+        Parameters
+        ----------
+        chromosome : str
+            The chromosome name
+        length : int, optional
+            The length of the genomic region, defaults to 4,000,000
+        strand : str, optional
+            The strand ('+' or '-'), defaults to '+'
         """
         chromosome = self.normalize_chromosome(chromosome)
         start = np.random.randint(0, len(self.genome_seq[chromosome]) - length)
@@ -454,11 +527,28 @@ class Genome:
     def get_chromosome_size(self, chromosome):
         """
         Get the size of the chromosome
+
+        Parameters
+        ----------
+        chromosome : str
+            The chromosome name
         """
+        return self.chrom_sizes[chromosome]
 
     def tiling_region(self, chromosome, tile_size, step_size, strand="+"):
         """
         Tile the chromosome into smaller regions
+
+        Parameters
+        ----------
+        chromosome : str
+            The chromosome name
+        tile_size : int
+            The size of the tile
+        step_size : int
+            The step size between tiles
+        strand : str, optional
+            The strand ('+' or '-'), defaults to '+'
         """
         chromosome = self.normalize_chromosome(chromosome)
         return GenomicRegionCollection(
@@ -539,6 +629,13 @@ class GenomicRegion:
         """
         Lift over the genomic region to another genome assembly using lo object
         User need to provide the correct lo object
+
+        Parameters
+        ----------
+        target_genome : Genome
+            The target genome assembly
+        lo : Liftover
+            The lo object
         """
         chromosome, start, end = lo.convert_coordinate(
             self.chromosome, self.start, self.end
@@ -551,6 +648,13 @@ class GenomicRegion:
     def get_flanking_region(self, upstream, downstream):
         """
         Get the flanking region of the genomic region
+
+        Parameters
+        ----------
+        upstream : int
+            The number of bases upstream of the genomic region
+        downstream : int
+            The number of bases downstream of the genomic region
         """
         return GenomicRegion(
             self.genome,
@@ -563,6 +667,13 @@ class GenomicRegion:
     def tiling_region(self, tile_size, step_size):
         """
         Tile the genomic region into smaller regions
+
+        Parameters
+        ----------
+        tile_size : int
+            The size of the tile
+        step_size : int
+            The step size between tiles
         """
         return GenomicRegionCollection(
             self.genome,

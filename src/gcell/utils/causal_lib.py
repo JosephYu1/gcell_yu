@@ -8,6 +8,20 @@ import plotly.graph_objects as go
 
 
 def get_top_edge_weight(G, n=1000):
+    """Get the top n edge weights from the graph.
+
+    Parameters
+    ----------
+    G: nx.Graph
+        The graph to get the top edge weights from.
+    n: int, optional
+        The number of edge weights to get, defaults to 1000.
+
+    Returns
+    -------
+    np.array
+        The top n edge weights.
+    """
     edge_weight_list = []
     for u, v, d in G.edges(data=True):
         edge_weight_list.append(d["weight"])
@@ -18,7 +32,15 @@ def get_top_edge_weight(G, n=1000):
 
 
 def set_node_community(G, communities):
-    """Add community to node attributes"""
+    """Add community to node attributes.
+
+    Parameters
+    ----------
+    G: nx.Graph
+        The graph to add the community to.
+    communities: list
+        The communities to add to the graph.
+    """
     for c, v_c in enumerate(communities):
         for v in v_c:
             # Add 1 to save 0 for external edges
@@ -26,7 +48,13 @@ def set_node_community(G, communities):
 
 
 def set_edge_community(G):
-    """Find internal edges and add their community to their attributes"""
+    """Find internal edges and add their community to their attributes.
+
+    Parameters
+    ----------
+    G: nx.Graph
+        The graph to add the community to.
+    """
     for (
         v,
         w,
@@ -40,7 +68,19 @@ def set_edge_community(G):
 
 
 def get_color(i, r_off=1, g_off=1, b_off=1):
-    """Assign a color to a vertex."""
+    """Assign a color to a vertex.
+
+    Parameters
+    ----------
+    i: int
+        The index of the vertex.
+    r_off: int, optional
+        The offset for the red channel, defaults to 1.
+    g_off: int, optional
+        The offset for the green channel, defaults to 1.
+    b_off: int, optional
+        The offset for the blue channel, defaults to 1.
+    """
     n = 16
     low, high = 0.5, 0.9
     span = high - low
@@ -51,6 +91,19 @@ def get_color(i, r_off=1, g_off=1, b_off=1):
 
 
 def plot_comm(G, figsize=(10, 10), title="Network structure", savefig=False):
+    """Plot the community structure of the graph.
+
+    Parameters
+    ----------
+    G: nx.Graph
+        The graph to plot.
+    figsize: tuple, optional
+        The size of the figure, defaults to (10, 10).
+    title: str, optional
+        The title of the plot, defaults to "Network structure".
+    savefig: str, optional
+        The path to save the plot, defaults to False.
+    """
     fig, ax = plt.subplots(1, 1, figsize=figsize)
     # Set community color for internal edges
     external = [(v, w) for v, w in G.edges if G.edges[v, w]["community"] == 0]
@@ -102,6 +155,17 @@ def plot_comm(G, figsize=(10, 10), title="Network structure", savefig=False):
 def plotly_networkx_digraph(
     G: nx.DiGraph, hoverinfo_dict=None, node_weights_dict=None
 ) -> go.Figure:
+    """Plot the graph using plotly.
+
+    Parameters
+    ----------
+    G: nx.DiGraph
+        The graph to plot.
+    hoverinfo_dict: dict, optional
+        The hover information for the nodes, defaults to None.
+    node_weights_dict: dict, optional
+        The node weights for the nodes, defaults to None.
+    """
     pos = nx.spring_layout(G)
 
     edge_count = len(G.edges())
@@ -210,22 +274,56 @@ def plotly_networkx_digraph(
 
 
 def get_parents_subnet(G, n):
-    """Get the subnet of the parents of a node"""
+    """Get the subnet of the parents of a node.
+
+    Parameters
+    ----------
+    G: nx.DiGraph
+        The graph to get the subnet from.
+    n: str
+        The node to get the subnet of.
+    """
     return G.subgraph(list(G.predecessors(n)) + [n])
 
 
 def get_children_subnet(G, n):
-    """Get the subnet of the children of a node"""
+    """Get the subnet of the children of a node.
+
+    Parameters
+    ----------
+    G: nx.DiGraph
+        The graph to get the subnet from.
+    n: str
+        The node to get the subnet of.
+    """
     return G.subgraph(list(G.successors(n)) + [n])
 
 
 def get_neighbors_subnet(G, n):
-    """Get the subnet of the neighbors of a node"""
+    """Get the subnet of the neighbors of a node.
+
+    Parameters
+    ----------
+    G: nx.DiGraph
+        The graph to get the subnet from.
+    n: str
+        The node to get the subnet of.
+    """
     return G.subgraph(list(nx.all_neighbors(G, n)) + [n])
 
 
 def get_subnet(G, n, type="neighbors"):
-    """Get the subnet of a node"""
+    """Get the subnet of a node.
+
+    Parameters
+    ----------
+    G: nx.DiGraph
+        The graph to get the subnet from.
+    n: str
+        The node to get the subnet of.
+    type: str, optional
+        The type of subnet to get, defaults to "neighbors".
+    """
     if type == "parents":
         return get_parents_subnet(G, n)
     elif type == "children":
@@ -237,6 +335,19 @@ def get_subnet(G, n, type="neighbors"):
 
 
 def preprocess_net(G, threshold=0.0, remove_nodes=True, detect_communities=True):
+    """Preprocess the network.
+
+    Parameters
+    ----------
+    G: nx.DiGraph
+        The graph to preprocess.
+    threshold: float, optional
+        The threshold for the edge weights, defaults to 0.0.
+    remove_nodes: bool, optional
+        Whether to remove the nodes, defaults to True.
+    detect_communities: bool, optional
+        Whether to detect the communities, defaults to True.
+    """
     G.remove_edges_from(
         [
             (n1, n2)

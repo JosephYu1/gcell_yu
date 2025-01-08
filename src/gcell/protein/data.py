@@ -126,11 +126,6 @@ class ProteinData:
     This class implements a singleton pattern to ensure only one instance of the
     protein data is loaded in memory. Data is loaded only when first accessed.
 
-    Attributes:
-        seq (dict): Mapping of UniProt IDs to protein sequences
-        genename_to_uniprot (dict): Mapping of gene names to UniProt IDs
-        lddt (dict): Mapping of UniProt IDs to AlphaFold pLDDT scores
-        schema: UniProt XML schema for parsing UniProt entries
     """
 
     _instance = None

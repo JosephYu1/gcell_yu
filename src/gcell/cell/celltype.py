@@ -4,13 +4,14 @@ Cell type analysis module for genomic data.
 This module provides classes and utilities for analyzing cell type-specific genomic data,
 including gene expression, motif analysis, and causal relationships between genes.
 
-Key Classes:
-    - Celltype: Base class for cell type analysis
-    - GETCellType: Extended cell type class with additional functionality
-    - GETHydraCellType: Cell type class optimized for hydra-config-based model analysis
-    - OneTSSJacobian: Class for analyzing Jacobian data for one TSS
-    - OneGeneJacobian: Class for analyzing Jacobian data for one gene
-    - GeneByMotif: Class for analyzing gene by motif relationships
+Classes
+-------
+Celltype: Base class for cell type analysis
+GETCellType: Extended cell type class with additional functionality
+GETHydraCellType: Cell type class optimized for hydra-config-based model analysis
+OneTSSJacobian: Class for analyzing Jacobian data for one TSS
+OneGeneJacobian: Class for analyzing Jacobian data for one gene
+GeneByMotif: Class for analyzing gene by motif relationships
 
 The module supports both local file system and S3 storage backends.
 """
@@ -48,13 +49,415 @@ from ..utils.s3 import (
 motif = NrMotifV1.load_from_pickle()
 motif_clusters = motif.cluster_names
 
-# Load gencode_hg38 from feather file
+# Load gencode_hg38 from feather file.
+# This is only used for backwards compatibility.
 gencode_hg38 = Gencode("hg38", version=44).gtf
 gencode_hg38["Strand"] = gencode_hg38["Strand"].apply(lambda x: 0 if x == "+" else 1)
 gene2strand = gencode_hg38.set_index("gene_name").Strand.to_dict()
 
 # Add logger configuration
 logger = get_logger(__name__)
+
+
+class OneTSSJacobian:
+    """Jacobian data for one TSS.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        The Jacobian data (Peak x Motif x Classes/Strands).
+    tss : TSS
+        The TSS object.
+    region : pd.DataFrame
+        The region data.
+    features : list
+        The features.
+    num_cls : int, optional
+        The number of classes/strands. Defaults to 2.
+    num_region_per_sample : int, optional
+        The number of regions per sample. Defaults to 200.
+    """
+
+    def __init__(
+        self,
+        data: np.ndarray,
+        tss: TSS,
+        region: pd.DataFrame,
+        features: list,
+        num_cls=2,
+        num_region_per_sample=200,
+        num_features=283,
+    ) -> None:
+        # check if the data dimension is correct:
+        # (num_cls, num_region_per_sample, num_features)
+        assert (
+            data.reshape(-1).shape[0] == num_cls * num_region_per_sample * num_features
+        )
+        self.TSS = tss
+        data = data.reshape(num_cls, num_region_per_sample, num_features)[tss.strand]
+        data_df = pd.DataFrame(data, columns=features)
+        data_df = pd.concat(
+            [region.reset_index(drop=True), data_df.reset_index(drop=True)],
+            axis=1,
+            ignore_index=True,
+        )
+        data_df.columns = region.columns.tolist() + list(features)
+        self.data = data_df
+        self.num_cls = num_cls
+        self.features = features
+        self.num_region_per_sample = num_region_per_sample
+        self.num_features = num_features
+
+    def __repr__(self) -> str:
+        return f"""TSS: {self.TSS}
+        Data shape: {self.data.shape}
+        """
+
+    # function for arbitrary transformation of the data
+
+    def transform(self, func):
+        """Transform the data."""
+        self.data = func(self.data)
+        return self.data
+
+    def motif_summary(self, stats="absmean"):
+        """Summarize the motif scores."""
+        # assert stats in ['mean', 'max']
+        motif_data = self.data[self.features]
+        if stats == "mean":
+            return motif_data.mean(axis=0)
+        elif stats == "max":
+            return motif_data.max(axis=0)
+        elif stats == "absmean":
+            return motif_data.abs().mean(axis=0)
+        elif stats == "signed_absmean":
+            return motif_data.abs().mean(axis=0) * np.sign(motif_data.mean(axis=0))
+        # if stats is a function
+        elif callable(stats):
+            return motif_data.apply(stats, axis=0)
+
+    def region_summary(self, stats="absmean"):
+        """Summarize the motif scores."""
+        data = self.data[self.features]
+        if stats == "mean":
+            region_data = data.mean(axis=1)
+        elif stats == "max":
+            region_data = data.max(axis=1)
+        elif stats == "absmean":
+            region_data = data.abs().mean(axis=1)
+        # if stats is a function
+        elif callable(stats):
+            region_data = data.apply(stats, axis=1)
+        data = self.data.iloc[:, 0:4]
+        data["Score"] = region_data
+        return data
+
+    def summarize(self, axis="motif", stats="absmean"):
+        """Summarize the data."""
+        if axis == "motif":
+            return self.motif_summary(stats)
+        elif axis == "region":
+            return self.region_summary(stats)
+
+    def get_pairs_with_l2_cutoff(self, cutoff: float):
+        """Get the pairs with L2 Norm cutoff."""
+        l2_norm = np.linalg.norm(self.data, axis=1)
+        if l2_norm == 0:
+            return None
+        v = self.data.values
+        v[v**2 < cutoff] = 0
+        v = csr_matrix(v)
+        # Get the row, col, and value arrays from the csr_matrix
+        rows, cols = v.nonzero()  # row are region idx, col are motif/feature idx
+        values = v.data
+        focus = self.num_region_per_sample // 2
+        start_idx = self.TSS.peak_id - focus
+        gene = self.TSS.gene_name
+        # get a dataframe of {'Chromosome', 'Start', 'End', 'Gene', 'Strand', 'Start', 'Pred', 'Accessibility', 'Motif', 'Score'}
+        df = self.peak_annot.iloc[
+            start_idx : start_idx + self.num_region_per_sample
+        ].copy()[["Chromosome", "Start", "End"]]
+        df = df.iloc[rows]
+        df["Motif"] = [self.data.columns[m] for m in cols]
+        df["Score"] = values
+        df["Gene"] = gene
+        df["Strand"] = self.TSS.strand
+        df["TSS"] = self.TSS.start
+        df = df[
+            ["Chromosome", "Start", "End", "Gene", "Strand", "TSS", "Motif", "Score"]
+        ]
+        return df
+
+
+class OneGeneJacobian(OneTSSJacobian):
+    """Jacobian data for one gene"""
+
+    def __init__(
+        self,
+        gene_name: str,
+        data: np.ndarray,
+        region: pd.DataFrame,
+        features: list,
+        num_cls=2,
+        num_region_per_sample=200,
+        num_features=283,
+    ) -> None:
+        self.gene_name = gene_name
+        data_df = pd.DataFrame(data, columns=features)
+        data_df = pd.concat(
+            [region.reset_index(drop=True), data_df.reset_index(drop=True)],
+            axis=1,
+            ignore_index=True,
+        )
+        data_df.columns = region.columns.tolist() + list(features)
+        self.data = data_df
+        self.num_cls = num_cls
+        self.features = features
+        self.num_region_per_sample = num_region_per_sample
+        self.num_features = num_features
+
+    def __repr__(self) -> str:
+        return f"""Gene: {self.gene_name}
+        """
+
+
+class GeneByMotif:
+    """
+    Class for analyzing gene by motif relationships.
+
+    This class handles the analysis of relationships between genes and motifs,
+    including causal graph generation and correlation analysis.
+
+    Parameters
+    ----------
+    celltype : str, optional
+        Cell type name
+    interpret_dir : str, optional
+        Interpretation directory path
+    jacob : pandas.DataFrame, optional
+        Jacobian data
+    s3_file_sys : S3FileSystem, optional
+        S3 filesystem object
+    zarr_data_path : str, optional
+        Path to zarr data
+
+    """
+
+    def __init__(
+        self,
+        celltype=None,
+        interpret_dir=None,
+        jacob=None,
+        s3_file_sys=None,
+        zarr_data_path=None,
+    ) -> None:
+        self.celltype = celltype
+        self.data = jacob
+        self.interpret_dir = interpret_dir
+        self.zarr_data_path = zarr_data_path
+        self.s3_file_sys = s3_file_sys
+        self._corr = None
+        self._causal = None
+
+    @staticmethod
+    def _process_permutation(args):
+        """Process a single permutation. The permutation is required because part of the
+        LiNGAM algorithm involves approximate triangularization of the data matrix, which
+        will be affected by the initial order of the columns. We try to permute the columns
+        to randomize the order. The column name will be carried over after permutation.
+
+        Parameters
+        ----------
+        args (tuple): Tuple containing (index, data, permute_columns, self)
+
+        Returns
+        -------
+        tuple: (index, causal_graph)
+        """
+        i, data, permute_columns, instance = args
+        permuted_data = (
+            data.iloc[:, np.random.permutation(data.shape[1])]
+            if permute_columns
+            else data.copy()
+        )
+        causal_g = instance.create_causal_graph(permuted_data)
+        return i, causal_g
+
+    def get_causal(
+        self,
+        edgelist_file=None,
+        permute_columns=True,
+        n=3,
+        overwrite=False,
+        max_workers=None,
+    ):
+        """
+        Generate causal graph from gene by motif data.
+
+        This method creates a causal graph representing relationships between genes
+        and motifs using the LiNGAM algorithm. Results can be cached in zarr format.
+
+        Parameters
+        ----------
+        edgelist_file : str, optional
+            Path to save/load edge list
+        permute_columns : bool, optional
+            Whether to permute columns, by default True
+        n : int, optional
+            Number of permutations, by default 3
+        overwrite : bool, optional
+            Whether to overwrite existing data, by default False
+        max_workers : int, optional
+            Maximum number of parallel workers
+
+        Returns
+        -------
+        networkx.DiGraph
+            Directed graph representing causal relationships
+        """
+        # Try loading from edgelist if provided
+        if (
+            edgelist_file is not None
+            and path_exists_with_s3(edgelist_file, s3_file_sys=self.s3_file_sys)
+            and not overwrite
+        ):
+            return nx.read_weighted_edgelist(edgelist_file, create_using=nx.DiGraph)
+
+        # Determine which zarr path to use
+        zarr_path = self.zarr_data_path
+        if zarr_path is None:
+            zarr_path = (
+                Path(self.interpret_dir)
+                / self.celltype
+                / "allgenes"
+                / f"{self.celltype}.zarr"
+            )
+
+        # Check if causal data exists in zarr
+        if (
+            path_exists_with_s3(zarr_path, s3_file_sys=self.s3_file_sys)
+            and not overwrite
+        ):
+            try:
+                return self.load_causal_from_zarr(zarr_path)
+            except Exception as e:
+                print(f"Failed to load from zarr: {str(e)}")
+
+        # Calculate causal data if not found
+        data = zscore(self.data, axis=0)
+        zarr_data = load_zarr_with_s3(zarr_path, mode="a", s3_file_sys=self.s3_file_sys)
+
+        # Calculate permutations in parallel
+        pending_indices = [
+            i for i in range(n) if f"causal_{i}" not in zarr_data or overwrite
+        ]
+        if pending_indices:
+            with ProcessPoolExecutor(max_workers=max_workers) as executor:
+                # Create arguments for each permutation - include self instance
+                args_list = [(i, data, permute_columns, self) for i in pending_indices]
+
+                # Process permutations in parallel and save results
+                for i, causal_g in tqdm(
+                    executor.map(self._process_permutation, args_list),
+                    total=len(pending_indices),
+                    desc="Processing permutations",
+                ):
+                    self.save_causal_to_zarr(zarr_data, causal_g, i)
+
+        # Compute and save average
+        average_causal = self.compute_average_causal(zarr_data, n)
+        zarr_data.array("causal", average_causal, dtype="float32", overwrite=True)
+
+        # Create final graph
+        causal_g = nx.from_numpy_array(average_causal, create_using=nx.DiGraph)
+        causal_g = nx.relabel_nodes(
+            causal_g, dict(zip(range(len(self.data.columns)), self.data.columns))
+        )
+
+        # Save edgelist if path provided
+        if edgelist_file:
+            nx.write_weighted_edgelist(causal_g, edgelist_file)
+
+        return causal_g
+
+    def create_causal_graph(self, data):
+        """
+        Create a causal graph from the data by running LiNGAM.
+
+        Parameters
+        ----------
+        data : pd.DataFrame
+            The data to create a causal graph from.
+
+        Returns
+        -------
+        networkx.DiGraph
+            The causal graph.
+        """
+        model = LiNGAM()
+        output = model.predict(data)
+        causal_g = preprocess_net(
+            output.copy(), remove_nodes=False, detect_communities=False
+        )
+        causal_g_numpy = nx.to_numpy_array(
+            causal_g, dtype="float32", nodelist=self.data.columns
+        )
+        causal_g = nx.from_numpy_array(causal_g_numpy, create_using=nx.DiGraph)
+        causal_g = nx.relabel_nodes(
+            causal_g, dict(zip(range(len(self.data.columns)), self.data.columns))
+        )
+        return causal_g
+
+    def load_causal_from_zarr(self, zarr_data_path):
+        """Load causal data from zarr file.
+
+        Supports both old and new zarr structures.
+        """
+        zarr_data = load_zarr_with_s3(
+            file_path=zarr_data_path,
+            mode="r",  # Changed to read-only mode since we're just loading
+            s3_file_sys=self.s3_file_sys,
+        )
+
+        # Try to find causal data in zarr structure
+        if "causal" in zarr_data:
+            causal_array = zarr_data["causal"][:]
+        elif "gene_by_motif_causal" in zarr_data:  # Alternative location
+            causal_array = zarr_data["gene_by_motif_causal"][:]
+        else:
+            raise KeyError("No causal data found in zarr file")
+
+        causal_g = nx.from_numpy_array(causal_array, create_using=nx.DiGraph)
+        causal_g = nx.relabel_nodes(
+            causal_g, dict(zip(range(len(self.data.columns)), self.data.columns))
+        )
+        return causal_g
+
+    def save_causal_to_zarr(self, zarr_data, causal_g, index=None):
+        """Save causal data to zarr file.
+
+        Args:
+            zarr_data: Zarr group to save to
+            causal_g: Causal graph to save
+            index: If provided, saves as causal_{index}, otherwise saves as causal
+        """
+        causal_g_numpy = nx.to_numpy_array(
+            causal_g, dtype="float32", nodelist=self.data.columns
+        )
+
+        array_name = f"causal_{index}" if index is not None else "causal"
+        zarr_data.array(array_name, causal_g_numpy, dtype="float32", overwrite=True)
+
+    def compute_average_causal(self, zarr_data, n):
+        """Compute the average causal graph across n permutations."""
+        causal_arrays = [zarr_data[f"causal_{i}"] for i in range(n)]
+        average_causal = np.mean(causal_arrays, axis=0)
+        return average_causal
+
+    def set_diagnal_to_zero(self, df: pd.DataFrame):
+        for i in range(df.shape[0]):
+            df.iloc[i, i] = 0
+        return df
 
 
 class Celltype:
@@ -64,47 +467,34 @@ class Celltype:
     This class provides core functionality for analyzing cell type-specific genomic data,
     including gene expression, motif analysis, and regulatory relationships.
 
+    The data-loading logic is now deprecated and only used for the demo data.
+
+    For your own analysis, you should use GETHydraCellType.
+
     Parameters
     ----------
-    features : numpy.ndarray
+    features
         Array of feature names/identifiers
-    num_region_per_sample : int
+    num_region_per_sample
         Number of regions per sample
-    celltype : str
+    celltype
         Name/identifier of the cell type
-    data_dir : str, optional
+    data_dir
         Directory containing data files, by default "../pretrain_human_bingren_shendure_apr2023"
-    interpret_dir : str, optional
+    interpret_dir
         Directory for interpretation results, by default "Interpretation"
-    assets_dir : str, optional
+    assets_dir
         Directory for assets/resources, by default "assets"
-    input : bool, optional
+    input
         Whether to load input data, by default False
-    jacob : bool, optional
+    jacob
         Whether to load Jacobian data, by default False
-    embed : bool, optional
+    embed
         Whether to load embedding data, by default False
-    num_cls : int, optional
+    num_cls
         Number of classes, by default 2
-    s3_file_sys : S3FileSystem, optional
+    s3_file_sys
         S3 filesystem object for remote storage, by default None
-
-    Attributes
-    ----------
-    celltype_name : str
-        Name of the cell type
-    features : numpy.ndarray
-        Array of features
-    num_features : int
-        Number of features
-    gene_annot : pandas.DataFrame
-        Gene annotations
-    peak_annot : pandas.DataFrame
-        Peak annotations
-    preds : numpy.ndarray
-        Prediction values
-    obs : numpy.ndarray
-        Observed values
     """
 
     def __init__(
@@ -320,7 +710,11 @@ class Celltype:
         """
 
     def load_gene_annot(self):
-        """Load gene annotations from feather file."""
+        """Load gene annotations from feather file.
+
+        If the feather file does not exist, construct the gene annotation from gencode.
+        Note that this is largely for backwards compatibility.
+        """
         if not path_exists_with_s3(
             self.gene_feather_path, s3_file_sys=self.s3_file_sys
         ):
@@ -368,7 +762,7 @@ class Celltype:
 
         Parameters
         ----------
-        gene_name : str
+        gene_name
             Name of the gene
 
         Returns
@@ -379,11 +773,38 @@ class Celltype:
         return self.gene_annot[self.gene_annot["gene_name"] == gene_name].index.values
 
     def get_tss_idx(self, gene_name: str):
-        """Get the TSS index of a gene."""
+        """Given a gene name, get the TSS index in the peak annotation.
+
+        Parameters
+        ----------
+        gene_name
+            The name of the gene.
+
+        Returns
+        -------
+        numpy.ndarray
+            The index of the TSS in the peak annotation.
+        """
         return self.tss_idx[self.get_gene_idx(gene_name)]
 
-    def get_gene_jacobian(self, gene_name: str, multiply_input: bool = True):
-        """Get the jacobian of a gene."""
+    def get_gene_jacobian(
+        self, gene_name: str, multiply_input: bool = True
+    ) -> list[OneTSSJacobian]:
+        """Get the jacobian of a gene. Each gene can have multiple TSSs, so this function returns a list of TSSJacobian objects.
+        Each OneTSSJacobian contains a Peak x Motif jacobian score for a given TSS.
+
+        Parameters
+        ----------
+        gene_name
+            The name of the gene.
+        multiply_input
+            If True, the input is multiplied. Defaults to True.
+
+        Returns
+        -------
+        list
+            A list of TSSJacobian objects.
+        """
         gene_idx = self.get_gene_idx(gene_name)
         gene_chr = self.get_gene_chromosome(gene_name)
         jacobs = []
@@ -400,7 +821,19 @@ class Celltype:
         return jacobs
 
     def get_input_data(self, peak_id=None, focus=None, start=None, end=None):
-        """Get input data from self.input_all using a slice"""
+        """Get input data from self.input_all using a slice
+
+        Parameters
+        ----------
+        peak_id
+            The peak id to get the input data from.
+        focus
+            The focus to get the input data from. Usually the middle of the region.
+        start
+            The start to get the input data from.
+        end
+            The end to get the input data from.
+        """
         # assert if all are None
         assert not all([peak_id, focus, start, end])
         if start is None:
@@ -409,7 +842,18 @@ class Celltype:
         return self.input_all[start:end].toarray().reshape(-1, self.num_features)
 
     def get_tss_jacobian(self, jacob: np.ndarray, tss: TSS, multiply_input=True):
-        """Get the jacobian of a TSS."""
+        """
+        Get the jacobian of a TSS.
+
+        Parameters
+        ----------
+        jacob
+            The jacobian to be processed.
+        tss
+            The TSS object.
+        multiply_input
+            If True, the input is multiplied. Defaults to True.
+        """
         jacob = jacob.reshape(-1, self.num_region_per_sample, self.num_features)
         if multiply_input:
             input = self.get_input_data(peak_id=tss.peak_id, focus=self.focus)
@@ -429,12 +873,17 @@ class Celltype:
         If the axis is "region", it concatenates the Jacobian summaries along axis 0, groups them by index, chromosome, and start,
         and then sums the scores.
 
-        Parameters:
-        gene (str): The gene for which the Jacobian is to be calculated.
-        axis (str, optional): The axis along which to summarize the Jacobian. Defaults to "motif".
-        multiply_input (bool, optional): If True, the input is multiplied. Defaults to True.
+        Parameters
+        ----------
+        gene
+            The gene for which the Jacobian is to be calculated.
+        axis
+            The axis along which to summarize the Jacobian. Defaults to "motif".
+        multiply_input
+            If True, the input is multiplied. Defaults to True.
 
-        Returns:
+        Returns
+        -------
         pd.DataFrame: A DataFrame containing the summarized Jacobian.
         """
         gene_jacobs = self.get_gene_jacobian(gene, multiply_input)
@@ -453,6 +902,21 @@ class Celltype:
 
     @property
     def gene_by_motif(self):
+        """
+        This method retrieves gene data by motif. It first checks if a zarr file exists for the cell type.
+        If it does, it opens the zarr file and checks if 'gene_by_motif' is in the keys of the zarr data.
+        If 'gene_by_motif' is found, it loads the data into a pandas DataFrame. If not, it computes the
+        jacobian for each gene and saves it to the zarr file.
+
+        If a zarr file does not exist, it checks if a feather file exists. If it does, it loads the data
+        into a pandas DataFrame. If not, it computes the jacobian for each gene and saves it to a feather file.
+
+        Finally, if the gene_by_motif data is a pandas DataFrame, it is converted to a GeneByMotif object.
+        If a zarr file exists, it checks if 'gene_by_motif_corr' is in the keys of the zarr data. If it is,
+        it loads the correlation data into the GeneByMotif object. If not, it computes the correlation and
+        saves it to the zarr file.
+
+        """
         if self._gene_by_motif is None:
             self._gene_by_motif = self.get_gene_by_motif()
         return self._gene_by_motif
@@ -476,8 +940,14 @@ class Celltype:
         it loads the correlation data into the GeneByMotif object. If not, it computes the correlation and
         saves it to the zarr file.
 
-        Returns:
-            GeneByMotif: An object that contains the gene data by motif and the correlation data.
+        Parameters
+        ----------
+        overwrite
+            If True, overwrite the existing data. Defaults to False.
+
+        Returns
+        -------
+        GeneByMotif: An object that contains the gene data by motif and the correlation data.
         """
         if path_exists_with_s3(
             self.interpret_cell_dir / f"{self.celltype}.zarr",
@@ -558,15 +1028,23 @@ class Celltype:
         """
         This function retrieves the pathway for a given transcription factor (tf) using g:Profiler.
 
-        Parameters:
-        tf (str): The transcription factor to get the pathway for.
-        gp (GProfiler, optional): An instance of the GProfiler class. If None, a new instance will be created. Defaults to None.
-        quantile_cutoff (float, optional): The quantile cutoff to use when selecting genes. Defaults to 0.9.
-        exp_cutoff (int, optional): The expression cutoff to use when querying genes. Defaults to 0.
-        filter_str (str, optional): The filter string to use when querying the g:Profiler results. Defaults to 'term_size<1000 & term_size>500'.
-        significance_threshold_method (str, optional): The method to use for determining the significance threshold in g:Profiler. Defaults to 'g_SCS'.
+        Parameters
+        ----------
+        tf
+            The transcription factor to get the pathway for.
+        gp
+            An instance of the GProfiler class. If None, a new instance will be created. Defaults to None.
+        quantile_cutoff
+            The quantile cutoff to use when selecting genes. Defaults to 0.9.
+        exp_cutoff
+            The expression cutoff to use when querying genes. Defaults to 0.
+        filter_str
+            The filter string to use when querying the g:Profiler results. Defaults to 'term_size<1000 & term_size>500'.
+        significance_threshold_method
+            The method to use for determining the significance threshold in g:Profiler. Defaults to 'g_SCS'.
 
-        Returns:
+        Returns
+        -------
         tuple: A tuple containing the filtered g:Profiler results and the unique genes in the pathways.
         """
         self.get_gene_by_motif()
@@ -595,7 +1073,7 @@ class Celltype:
         pathway_genes = np.unique(np.concatenate(go_filtered.intersections.values))
         return go_filtered, pathway_genes
 
-    def get_highest_exp_genes(self, genes):
+    def get_highest_exp_genes(self, genes: list):
         """
         This code takes in a list of genes and returns the gene with the highest expression value.
         """
@@ -606,7 +1084,10 @@ class Celltype:
             .gene_name.values[0]
         )
 
-    def get_genes_exp(self, genes):
+    def get_genes_exp(self, genes: list):
+        """
+        Get the expression of a list of genes.
+        """
         return self.gene_annot.query("gene_name.isin(@genes)").sort_values(
             "pred", ascending=False
         )
@@ -616,11 +1097,15 @@ class Celltype:
         This method generates a formatted string of gene names and their corresponding predicted expression values.
         The expression values are averaged and sorted in descending order.
 
-        Parameters:
-        motif (Motif object): The motif object containing the cluster gene list.
-        m (int): The index to access the specific cluster gene list from the motif object.
+        Parameters
+        ----------
+        motif
+            The motif object containing the cluster gene list.
+        m
+            The index to access the specific cluster gene list from the motif object.
 
-        Returns:
+        Returns
+        -------
         str: A string representation of gene names and their corresponding predicted expression values.
             The string is formatted as 'gene_name\tpred', where 'pred' is a 2 digit floating point number.
             Each gene name and its corresponding predicted expression value are separated by a '<br />'.
@@ -1018,16 +1503,26 @@ class Celltype:
 class GETCellType(Celltype):
     def __init__(self, celltype, config, s3_file_sys=None):
         """
-        Initialize GETCellType instance.
+        Initialize GETCellType instance from a config.
 
         Parameters
         ----------
-        celltype : str
+        celltype
             Cell type name
-        config : Config
+        config
             Configuration object
-        s3_file_sys : S3FileSystem, optional
+        s3_file_sys
             S3 file system object
+
+        Returns
+        -------
+        GETCellType
+            New instance
+
+        Note
+        -----
+        This is deprecated and only used for backwards compatibility for demo website.
+
         """
         features = config.celltype.features
         if features == "NrMotifV1":
@@ -1065,26 +1560,14 @@ class GETHydraCellType(Celltype):
 
     Parameters
     ----------
-    celltype : str
+    celltype
         Name/identifier of the cell type
-    zarr_path : str
+    zarr_path
         Path to zarr data
 
-    Attributes
-    ----------
-    celltype : str
-        Name of the cell type
-    zarr_path : str
-        Path to zarr data
-    motif : NrMotifV1
-        Motif data object
-    features : list
-        List of features
-    num_features : int
-        Number of features
     """
 
-    def __init__(self, celltype, zarr_path, prediction_target="exp"):
+    def __init__(self, celltype: str, zarr_path: str, prediction_target: str = "exp"):
         # Initialize parent class attributes that will be needed
         self._gene_by_motif = None
         self.celltype = celltype
@@ -1123,9 +1606,11 @@ class GETHydraCellType(Celltype):
         logging.info(f"Processing data for {self.celltype}")
 
         # Get all data upfront
-        focus_idx = 100  # Since this was hardcoded in original code
+        focus_idx = 100  # Since this was hardcoded in model interpretation code
         available_genes = self._zarr_data["available_genes"][:].reshape(-1)
         chromosome = self._zarr_data["chromosome"][:].flatten()
+        # strip whitespace from chromosome
+        chromosome = np.array([x.strip(" ") for x in chromosome])
         strands = self._zarr_data["strand"][:].astype(int)
         peak_coord = self._zarr_data["peak_coord"][:]
         input_data = self._zarr_data["input"][:]
@@ -1168,20 +1653,57 @@ class GETHydraCellType(Celltype):
             }
         ).reset_index()
 
-    def get_gene_idx(self, gene_name: str):
-        """Get all indices for a given gene name."""
+    def get_gene_idx(self, gene_name: str) -> np.ndarray:
+        """Get all indices for a given gene name.
+
+        Parameters
+        ----------
+        gene_name
+            The name of the gene.
+
+        Returns
+        -------
+        np.ndarray
+            The indices of the gene.
+        """
         return self.gene_annot[self.gene_annot["gene_name"] == gene_name].index.values
 
-    def get_gene_strand(self, gene_name: str):
-        """Get strand information for a gene."""
+    def get_gene_strand(self, gene_name: str) -> int:
+        """Get strand information for a gene.
+
+        Parameters
+        ----------
+        gene_name
+            The name of the gene.
+
+        Returns
+        -------
+        int
+            The strand. 0 for '+', 1 for '-'.
+        """
         v = self.gene_annot[self.gene_annot["gene_name"] == gene_name]["Strand"].values
         if isinstance(v, np.ndarray):
             return v[0]
         else:
             return v
 
-    def get_gene_jacobian(self, gene_name: str, multiply_input=True):
-        """Get jacobians for all TSS of a gene."""
+    def get_gene_jacobian(
+        self, gene_name: str, multiply_input=True
+    ) -> list[OneGeneJacobian]:
+        """Get jacobians for all TSS of a gene.
+
+        Parameters
+        ----------
+        gene_name
+            The name of the gene.
+        multiply_input
+            Whether to multiply the input data by the jacobian, by default True
+
+        Returns
+        -------
+        list
+            The jacobians.
+        """
         indices = self.get_gene_idx(gene_name)
         strand = self.get_gene_strand(gene_name)
 
@@ -1209,7 +1731,7 @@ class GETHydraCellType(Celltype):
 
         return jacobians
 
-    def get_gene_chromosome(self, gene_name: str):
+    def get_gene_chromosome(self, gene_name: str) -> str:
         """Get the chromosome of a gene."""
         return self.gene_annot[self.gene_annot["gene_name"] == gene_name][
             "Chromosome"
@@ -1224,21 +1746,20 @@ class GETHydraCellType(Celltype):
         Number of peaks: {len(self.peak_annot)}
         """
 
-    # class method create from config
     @classmethod
     def from_config(cls, cfg, celltype=None, zarr_path=None, prediction_target=None):
         """
-        Create instance from configuration.
+        Create GETHydraCellType instance from configuration.
 
         Parameters
         ----------
-        cfg : Config
+        cfg
             Configuration object
-        celltype : str, optional
+        celltype
             Cell type name
-        zarr_path : str, optional
+        zarr_path
             Path to zarr data
-        prediction_target : str, optional
+        prediction_target
             Prediction target. Default is the first loss component in the model.
 
         Returns
@@ -1261,10 +1782,22 @@ class GETHydraCellType(Celltype):
             prediction_target=prediction_target,
         )
 
-    def get_gene_by_motif(self, overwrite: bool = False):
+    def get_gene_by_motif(self, overwrite: bool = False) -> GeneByMotif:
         """
-        Override parent method to handle gene by motif analysis for hydra cell type.
-        Now processes all TSS sites for each gene.
+        Calculate gene by motif data for hydra-based cell-type.
+
+        This method calculates the gene by motif data for a GETHydraCellType.
+        It averages the jacobians across all TSS sites for each gene.
+
+        Parameters
+        ----------
+        overwrite
+            Whether to overwrite existing data, by default False
+
+        Returns
+        -------
+        GeneByMotif
+            The gene by motif data.
         """
         if "gene_by_motif" in self._zarr_data and not overwrite:
             gene_by_motif_values = self._zarr_data["gene_by_motif"][:]
@@ -1312,19 +1845,19 @@ class GETHydraCellType(Celltype):
         )
         return self._gene_by_motif
 
-    def plot_gene_motifs(self, gene, motif, overwrite: bool = False, n=10):
+    def plot_gene_motifs(self, gene, motif=None, overwrite: bool = False, n: int = 10):
         """
         Plot top N motifs for a gene. Based on the absolute mean of the motif scores.
 
         Parameters
         ----------
-        gene : str
+        gene
             Gene name
-        motif : str
-            Motif name
-        overwrite : bool, optional
+        motif
+            Motif instance. Not used, self.motif is used instead.
+        overwrite
             Whether to overwrite existing plots, by default False
-        n : int, optional
+        n
             Number of motifs to plot, by default 10
         """
         r = self.get_gene_jacobian_summary(gene, "motif")
@@ -1374,380 +1907,6 @@ class GETHydraCellType(Celltype):
                 ax[i // 5][i % 5].set_title(f"{m_i}")
 
         return fig, ax
-
-
-class OneTSSJacobian:
-    """Jacobian data for one TSS."""
-
-    def __init__(
-        self,
-        data: np.ndarray,
-        tss: TSS,
-        region: pd.DataFrame,
-        features: list,
-        num_cls=2,
-        num_region_per_sample=200,
-        num_features=283,
-    ) -> None:
-        # check if the data dimension is correct:
-        # (num_cls, num_region_per_sample, num_features)
-        assert (
-            data.reshape(-1).shape[0] == num_cls * num_region_per_sample * num_features
-        )
-        self.TSS = tss
-        data = data.reshape(num_cls, num_region_per_sample, num_features)[tss.strand]
-        data_df = pd.DataFrame(data, columns=features)
-        data_df = pd.concat(
-            [region.reset_index(drop=True), data_df.reset_index(drop=True)],
-            axis=1,
-            ignore_index=True,
-        )
-        data_df.columns = region.columns.tolist() + list(features)
-        self.data = data_df
-        self.num_cls = num_cls
-        self.features = features
-        self.num_region_per_sample = num_region_per_sample
-        self.num_features = num_features
-
-    def __repr__(self) -> str:
-        return f"""TSS: {self.TSS}
-        Data shape: {self.data.shape}
-        """
-
-    # function for arbitrary transformation of the data
-
-    def transform(self, func):
-        """Transform the data."""
-        self.data = func(self.data)
-        return self.data
-
-    def motif_summary(self, stats="absmean"):
-        """Summarize the motif scores."""
-        # assert stats in ['mean', 'max']
-        motif_data = self.data[self.features]
-        if stats == "mean":
-            return motif_data.mean(axis=0)
-        elif stats == "max":
-            return motif_data.max(axis=0)
-        elif stats == "absmean":
-            return motif_data.abs().mean(axis=0)
-        elif stats == "signed_absmean":
-            return motif_data.abs().mean(axis=0) * np.sign(motif_data.mean(axis=0))
-        # if stats is a function
-        elif callable(stats):
-            return motif_data.apply(stats, axis=0)
-
-    def region_summary(self, stats="absmean"):
-        """Summarize the motif scores."""
-        data = self.data[self.features]
-        if stats == "mean":
-            region_data = data.mean(axis=1)
-        elif stats == "max":
-            region_data = data.max(axis=1)
-        elif stats == "absmean":
-            region_data = data.abs().mean(axis=1)
-        # if stats is a function
-        elif callable(stats):
-            region_data = data.apply(stats, axis=1)
-        data = self.data.iloc[:, 0:4]
-        data["Score"] = region_data
-        return data
-
-    def summarize(self, axis="motif", stats="absmean"):
-        """Summarize the data."""
-        if axis == "motif":
-            return self.motif_summary(stats)
-        elif axis == "region":
-            return self.region_summary(stats)
-
-    def get_pairs_with_l2_cutoff(self, cutoff: float):
-        """Get the pairs with L2 Norm cutoff."""
-        l2_norm = np.linalg.norm(self.data, axis=1)
-        if l2_norm == 0:
-            return None
-        v = self.data.values
-        v[v**2 < cutoff] = 0
-        v = csr_matrix(v)
-        # Get the row, col, and value arrays from the csr_matrix
-        rows, cols = v.nonzero()  # row are region idx, col are motif/feature idx
-        values = v.data
-        focus = self.num_region_per_sample // 2
-        start_idx = self.TSS.peak_id - focus
-        gene = self.TSS.gene_name
-        # get a dataframe of {'Chromosome', 'Start', 'End', 'Gene', 'Strand', 'Start', 'Pred', 'Accessibility', 'Motif', 'Score'}
-        df = self.peak_annot.iloc[
-            start_idx : start_idx + self.num_region_per_sample
-        ].copy()[["Chromosome", "Start", "End"]]
-        df = df.iloc[rows]
-        df["Motif"] = [self.data.columns[m] for m in cols]
-        df["Score"] = values
-        df["Gene"] = gene
-        df["Strand"] = self.TSS.strand
-        df["TSS"] = self.TSS.start
-        df = df[
-            ["Chromosome", "Start", "End", "Gene", "Strand", "TSS", "Motif", "Score"]
-        ]
-        return df
-
-
-class OneGeneJacobian(OneTSSJacobian):
-    """Jacobian data for one gene"""
-
-    def __init__(
-        self,
-        gene_name: str,
-        data: np.ndarray,
-        region: pd.DataFrame,
-        features: list,
-        num_cls=2,
-        num_region_per_sample=200,
-        num_features=283,
-    ) -> None:
-        self.gene_name = gene_name
-        data_df = pd.DataFrame(data, columns=features)
-        data_df = pd.concat(
-            [region.reset_index(drop=True), data_df.reset_index(drop=True)],
-            axis=1,
-            ignore_index=True,
-        )
-        data_df.columns = region.columns.tolist() + list(features)
-        self.data = data_df
-        self.num_cls = num_cls
-        self.features = features
-        self.num_region_per_sample = num_region_per_sample
-        self.num_features = num_features
-
-    def __repr__(self) -> str:
-        return f"""Gene: {self.gene_name}
-        """
-
-
-class GeneByMotif:
-    """
-    Class for analyzing gene by motif relationships.
-
-    This class handles the analysis of relationships between genes and motifs,
-    including causal graph generation and correlation analysis.
-
-    Parameters
-    ----------
-    celltype : str, optional
-        Cell type name
-    interpret_dir : str, optional
-        Interpretation directory path
-    jacob : pandas.DataFrame, optional
-        Jacobian data
-    s3_file_sys : S3FileSystem, optional
-        S3 filesystem object
-    zarr_data_path : str, optional
-        Path to zarr data
-
-    Attributes
-    ----------
-    celltype : str
-        Cell type name
-    data : pandas.DataFrame
-        Gene by motif data
-    interpret_dir : str
-        Interpretation directory path
-    """
-
-    def __init__(
-        self,
-        celltype=None,
-        interpret_dir=None,
-        jacob=None,
-        s3_file_sys=None,
-        zarr_data_path=None,
-    ) -> None:
-        self.celltype = celltype
-        self.data = jacob
-        self.interpret_dir = interpret_dir
-        self.zarr_data_path = zarr_data_path
-        self.s3_file_sys = s3_file_sys
-        self._corr = None
-        self._causal = None
-
-    @staticmethod
-    def _process_permutation(args):
-        """Process a single permutation.
-
-        Args:
-            args (tuple): Tuple containing (index, data, permute_columns, self)
-
-        Returns:
-            tuple: (index, causal_graph)
-        """
-        i, data, permute_columns, instance = args
-        permuted_data = (
-            data.iloc[:, np.random.permutation(data.shape[1])]
-            if permute_columns
-            else data.copy()
-        )
-        causal_g = instance.create_causal_graph(permuted_data)
-        return i, causal_g
-
-    def get_causal(
-        self,
-        edgelist_file=None,
-        permute_columns=True,
-        n=3,
-        overwrite=False,
-        max_workers=None,
-    ):
-        """
-        Generate causal graph from gene by motif data.
-
-        This method creates a causal graph representing relationships between genes
-        and motifs using the LiNGAM algorithm. Results can be cached in zarr format.
-
-        Parameters
-        ----------
-        edgelist_file : str, optional
-            Path to save/load edge list
-        permute_columns : bool, optional
-            Whether to permute columns, by default True
-        n : int, optional
-            Number of permutations, by default 3
-        overwrite : bool, optional
-            Whether to overwrite existing data, by default False
-        max_workers : int, optional
-            Maximum number of parallel workers
-
-        Returns
-        -------
-        networkx.DiGraph
-            Directed graph representing causal relationships
-        """
-        # Try loading from edgelist if provided
-        if (
-            edgelist_file is not None
-            and path_exists_with_s3(edgelist_file, s3_file_sys=self.s3_file_sys)
-            and not overwrite
-        ):
-            return nx.read_weighted_edgelist(edgelist_file, create_using=nx.DiGraph)
-
-        # Determine which zarr path to use
-        zarr_path = self.zarr_data_path
-        if zarr_path is None:
-            zarr_path = (
-                Path(self.interpret_dir)
-                / self.celltype
-                / "allgenes"
-                / f"{self.celltype}.zarr"
-            )
-
-        # Check if causal data exists in zarr
-        if (
-            path_exists_with_s3(zarr_path, s3_file_sys=self.s3_file_sys)
-            and not overwrite
-        ):
-            try:
-                return self.load_causal_from_zarr(zarr_path)
-            except Exception as e:
-                print(f"Failed to load from zarr: {str(e)}")
-
-        # Calculate causal data if not found
-        data = zscore(self.data, axis=0)
-        zarr_data = load_zarr_with_s3(zarr_path, mode="a", s3_file_sys=self.s3_file_sys)
-
-        # Calculate permutations in parallel
-        pending_indices = [
-            i for i in range(n) if f"causal_{i}" not in zarr_data or overwrite
-        ]
-        if pending_indices:
-            with ProcessPoolExecutor(max_workers=max_workers) as executor:
-                # Create arguments for each permutation - include self instance
-                args_list = [(i, data, permute_columns, self) for i in pending_indices]
-
-                # Process permutations in parallel and save results
-                for i, causal_g in tqdm(
-                    executor.map(self._process_permutation, args_list),
-                    total=len(pending_indices),
-                    desc="Processing permutations",
-                ):
-                    self.save_causal_to_zarr(zarr_data, causal_g, i)
-
-        # Compute and save average
-        average_causal = self.compute_average_causal(zarr_data, n)
-        zarr_data.array("causal", average_causal, dtype="float32", overwrite=True)
-
-        # Create final graph
-        causal_g = nx.from_numpy_array(average_causal, create_using=nx.DiGraph)
-        causal_g = nx.relabel_nodes(
-            causal_g, dict(zip(range(len(self.data.columns)), self.data.columns))
-        )
-
-        # Save edgelist if path provided
-        if edgelist_file:
-            nx.write_weighted_edgelist(causal_g, edgelist_file)
-
-        return causal_g
-
-    def create_causal_graph(self, data):
-        model = LiNGAM()
-        output = model.predict(data)
-        causal_g = preprocess_net(
-            output.copy(), remove_nodes=False, detect_communities=False
-        )
-        causal_g_numpy = nx.to_numpy_array(
-            causal_g, dtype="float32", nodelist=self.data.columns
-        )
-        causal_g = nx.from_numpy_array(causal_g_numpy, create_using=nx.DiGraph)
-        causal_g = nx.relabel_nodes(
-            causal_g, dict(zip(range(len(self.data.columns)), self.data.columns))
-        )
-        return causal_g
-
-    def load_causal_from_zarr(self, zarr_data_path):
-        """Load causal data from zarr file.
-
-        Supports both old and new zarr structures.
-        """
-        zarr_data = load_zarr_with_s3(
-            file_path=zarr_data_path,
-            mode="r",  # Changed to read-only mode since we're just loading
-            s3_file_sys=self.s3_file_sys,
-        )
-
-        # Try to find causal data in zarr structure
-        if "causal" in zarr_data:
-            causal_array = zarr_data["causal"][:]
-        elif "gene_by_motif_causal" in zarr_data:  # Alternative location
-            causal_array = zarr_data["gene_by_motif_causal"][:]
-        else:
-            raise KeyError("No causal data found in zarr file")
-
-        causal_g = nx.from_numpy_array(causal_array, create_using=nx.DiGraph)
-        causal_g = nx.relabel_nodes(
-            causal_g, dict(zip(range(len(self.data.columns)), self.data.columns))
-        )
-        return causal_g
-
-    def save_causal_to_zarr(self, zarr_data, causal_g, index=None):
-        """Save causal data to zarr file.
-
-        Args:
-            zarr_data: Zarr group to save to
-            causal_g: Causal graph to save
-            index: If provided, saves as causal_{index}, otherwise saves as causal
-        """
-        causal_g_numpy = nx.to_numpy_array(
-            causal_g, dtype="float32", nodelist=self.data.columns
-        )
-
-        array_name = f"causal_{index}" if index is not None else "causal"
-        zarr_data.array(array_name, causal_g_numpy, dtype="float32", overwrite=True)
-
-    def compute_average_causal(self, zarr_data, n):
-        causal_arrays = [zarr_data[f"causal_{i}"] for i in range(n)]
-        average_causal = np.mean(causal_arrays, axis=0)
-        return average_causal
-
-    def set_diagnal_to_zero(self, df: pd.DataFrame):
-        for i in range(df.shape[0]):
-            df.iloc[i, i] = 0
-        return df
 
 
 def celltype_factory(celltype_class, cell_id, config, zarr_path=None, motif_path=None):

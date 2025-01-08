@@ -1,3 +1,11 @@
+"""
+Module for handling GTF annotation files.
+
+Classes
+-------
+GTF: A class to handle GTF annotation files.
+"""
+
 from pathlib import Path
 
 import numpy as np
@@ -15,9 +23,10 @@ class GTF:
     def __init__(self, gtf_path, exclude_chrs=["chrM", "chrY"]):
         """Initialize GTF reader with a path to GTF file
 
-        Args:
-            gtf_path: Path to GTF file (can be gzipped)
-            exclude_chrs: List of chromosomes to exclude
+        Parameters
+        ----------
+        gtf_path: Path to GTF file (can be gzipped)
+        exclude_chrs: List of chromosomes to exclude, defaults to ["chrM", "chrY"]
         """
         self.gtf_path = Path(gtf_path)
 
@@ -27,7 +36,19 @@ class GTF:
         self.gtf = self._load_gtf(exclude_chrs)
 
     def _load_gtf(self, exclude_chrs):
-        """Load and process GTF file into standardized format"""
+        """Load and process GTF file into standardized format.
+
+        We also filter out the excluded chromosomes and remove genes with multiple chromosomes.
+
+        Parameters
+        ----------
+        exclude_chrs: List of chromosomes to exclude, defaults to ["chrM", "chrY"]
+
+        Returns
+        -------
+        pd.DataFrame
+            The GTF data in a standardized format.
+        """
         gtf_df = read_gtf(str(self.gtf_path)).as_df()
 
         # Process transcripts for positive and negative strands
@@ -80,7 +101,19 @@ class GTF:
 
         return gtf_df
 
-    def get_gene(self, gene_name):
+    def get_gene(self, gene_name) -> Gene:
+        """Get a Gene object for the given gene name.
+
+        Parameters
+        ----------
+        gene_name: str
+            The gene name to get the Gene object for.
+
+        Returns
+        -------
+        Gene
+            The Gene object.
+        """
         df = self.gtf[self.gtf.gene_name == gene_name]
         return Gene(
             name=df.gene_name.iloc[0],
@@ -100,11 +133,34 @@ class GTF:
             ],
         )
 
-    def get_genes(self, gene_names):
+    def get_genes(self, gene_names) -> GeneSets:
+        """Get a list of Gene objects for the given gene names.
+
+        Parameters
+        ----------
+        gene_names: List of gene names
+
+        Returns
+        -------
+        GeneSets
+            A list of Gene objects.
+        """
         gene_names = np.intersect1d(gene_names, np.unique(self.gtf.gene_name.values))
         return GeneSets([self.get_gene(gene_name) for gene_name in tqdm(gene_names)])
 
-    def get_gene_id(self, gene_id):
+    def get_gene_id(self, gene_id) -> Gene:
+        """Get a Gene object for the given gene ID.
+
+        Parameters
+        ----------
+        gene_id: str
+            The gene ID to get the Gene object for.
+
+        Returns
+        -------
+        Gene
+            The Gene object.
+        """
         df = self.gtf[self.gtf.gene_id.str.startswith(gene_id)]
         return Gene(
             name=df.gene_name.iloc[0],
@@ -124,8 +180,19 @@ class GTF:
             ],
         )
 
-    def get_genebodies(self, gene_names=None):
-        """If none, return all gene bodies in a pandas dataframe"""
+    def get_genebodies(self, gene_names=None) -> pd.DataFrame:
+        """Get the gene bodies for the given gene names.
+
+        Parameters
+        ----------
+        gene_names: List of gene names, optional
+            The gene names to get the gene bodies for, defaults to None.
+
+        Returns
+        -------
+        pd.DataFrame
+            The gene bodies.
+        """
         genebodies = self.gtf.query('gene_type == "protein_coding"')
         genebodies["Start"] = genebodies.groupby(["Chromosome", "gene_name"])[
             "Start"
@@ -149,7 +216,21 @@ class GTF:
             genebodies = genebodies[genebodies.gene_name.isin(gene_names)]
         return genebodies
 
-    def get_exp_feather(self, peaks, extend_bp=300):
+    def get_exp_feather(self, peaks, extend_bp=300) -> pd.DataFrame:
+        """Get the expression data for the given peaks. Only for backwards compatibility.
+
+        Parameters
+        ----------
+        peaks: pd.DataFrame
+            The peaks to query.
+        extend_bp: int, optional
+            The number of base pairs to extend the peaks, defaults to 300.
+
+        Returns
+        -------
+        pd.DataFrame
+            The expression data.
+        """
         exp = (
             pr(peaks, int64=True)
             .join(pr(self.gtf, int64=True).extend(extend_bp), how="left")
@@ -157,7 +238,20 @@ class GTF:
         )
         return exp.reset_index(drop=True)
 
-    def query_region(self, chrom, start, end, strand=None):
+    def query_region(self, chrom, start, end, strand=None) -> pd.DataFrame:
+        """Query the GTF for regions matching the given parameters.
+
+        Parameters
+        ----------
+        chrom: str
+            The chromosome to query.
+        start: int
+            The start position to query.
+        end: int
+            The end position to query.
+        strand: str, optional
+            The strand to query, defaults to None.
+        """
         result = self.gtf.query(
             f'Chromosome == "{chrom}" & Start > {start} & End < {end}'
         )

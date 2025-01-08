@@ -1,3 +1,14 @@
+"""
+# TODO: This is still a work in progress
+Class to handle mutations in a specific cell type that alters motifs.
+
+Classes
+-------
+MutationsInCellType: Base class to handle mutations in a specific cell type
+CellMutCollection: Base class to handle mutations in a collection of cell types
+GETHydraCellMutCollection: Class to handle mutations in a collection of GETHydraCellType
+"""
+
 import concurrent.futures
 import contextlib
 import re
@@ -6,13 +17,12 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import pkg_resources
 from omegaconf import DictConfig
 from pyranges import PyRanges as pr
 
 from .._logging import get_logger
 from .._settings import get_setting
-from ..cell.celltype import GETCellType, GETHydraCellType
+from ..cell.celltype import CellType, GETCellType, GETHydraCellType
 from ..config.config import load_config
 from ..dna.genome import Genome, GenomicRegionCollection
 from ..dna.mutation import Mutations, read_rsid_parallel
@@ -24,9 +34,20 @@ logger = get_logger(__name__)
 
 
 class MutationsInCellType:
-    """Class to handle mutations in a specific cell type"""
+    """Class to handle mutations in a specific cell type
 
-    def __init__(self, genome, df, cell_type):
+    Parameters
+    ----------
+    genome : Genome
+        The genome object.
+    df : pd.DataFrame
+        The mutation data.
+    cell_type : CellType
+        The cell type object.
+
+    """
+
+    def __init__(self, genome: Genome, df: pd.DataFrame, cell_type: CellType):
         self.celltype = cell_type
         df = pr(cell_type.peak_annot).join(pr(df)).df
         # keep only variants with one base change
@@ -42,6 +63,9 @@ class MutationsInCellType:
         # self.get_altered_input()
 
     def get_original_input(self, motif):
+        """
+        Get the original input for the mutation.
+        """
         self.Ref_peak_seq = [
             s.seq for s in self.mut.collect_sequence(upstream=0, downstream=0).sequences
         ]
@@ -54,6 +78,9 @@ class MutationsInCellType:
         self.Ref_input = Ref_peak_seq.scan_motif(motif)
 
     def get_altered_input(self, motif):
+        """
+        Get the altered input for the mutation.
+        """
         if self.Ref_peak_seq is None:
             self.get_original_input()
         Alt_peak_seq = DNASequenceCollection(
@@ -72,6 +99,24 @@ class MutationsInCellType:
 
 
 class CellMutCollection:
+    """
+    Class to handle mutations in a collection of cell types.
+
+    Parameters
+    ----------
+    get_config_path : str
+        The path to the configuration file.
+    genome_path : str
+        The path to the genome file.
+    motif_path : str
+        The path to the motif file.
+    celltype_list : list[str]
+        The list of cell types.
+    variant_list : list[str]
+        The list of variants.
+
+    """
+
     def __init__(
         self,
         get_config_path,
@@ -156,7 +201,9 @@ class CellMutCollection:
                 f.write(item)
                 f.write("\n")
 
-    def filter_variant_to_genes_map(self, variant_to_genes):
+    def filter_variant_to_genes_map(
+        self, variant_to_genes
+    ) -> dict[tuple[str, str], list[str]]:
         variant_to_genes = {
             rsid: gene
             for rsid, gene in variant_to_genes.items()
@@ -169,7 +216,20 @@ class CellMutCollection:
                 celltype_specific_variant_to_genes[(variant, cell_id)] = nearby_genes
         return celltype_specific_variant_to_genes
 
-    def load_normal_filter_normal_variants(self, normal_variants_path):
+    def load_normal_filter_normal_variants(self, normal_variants_path) -> pd.DataFrame:
+        """
+        Load the normal variants and filter them.
+
+        Parameters
+        ----------
+        normal_variants_path : str
+            The path to the normal variants file.
+
+        Returns
+        -------
+        pd.DataFrame
+            The filtered normal variants.
+        """
         normal_variants = pd.read_csv(
             normal_variants_path, sep="\t", comment="#", header=None
         )
@@ -205,6 +265,19 @@ class CellMutCollection:
         return normal_variants
 
     def generate_motif_diff_df(self, *, save_motif_df: bool = True):
+        """
+        Generate the motif difference dataframe.
+
+        Parameters
+        ----------
+        save_motif_df : bool, optional
+            Whether to save the motif difference dataframe, by default True
+
+        Returns
+        -------
+        pd.DataFrame
+            The motif difference dataframe.
+        """
         variants_rsid = self.all_variant_mut_df.copy()
         variants_rsid = variants_rsid.dropna()
         variants_rsid = variants_rsid.drop_duplicates(subset="RSID", keep="first")
@@ -221,7 +294,20 @@ class CellMutCollection:
         self.motif_diff_df = motif_diff_df
         return motif_diff_df
 
-    def get_variant_score(self, args_tuple):
+    def get_variant_score(self, args_tuple) -> pd.DataFrame:
+        """
+        Get the score for a variant.
+
+        Parameters
+        ----------
+        args_tuple : tuple
+            The tuple of arguments.
+
+        Returns
+        -------
+        pd.DataFrame
+            The score for the variant.
+        """
         variant, gene, cell_id = args_tuple
         variant_df = self.all_variant_mut_df[
             self.all_variant_mut_df["RSID"] == variant
@@ -255,7 +341,20 @@ class CellMutCollection:
         combined_score["motif_importance"] = motif_importance.values
         return combined_score
 
-    def get_scores_for_single_risk_variant(self, variant):
+    def get_scores_for_single_risk_variant(self, variant) -> pd.DataFrame:
+        """
+        Get the scores for a single risk variant.
+
+        Parameters
+        ----------
+        variant : str
+            The variant.
+
+        Returns
+        -------
+        pd.DataFrame
+            The scores for the variant.
+        """
         variants_to_run = [variant] + self.variant_to_normal_variants[variant]
 
         scores = []
@@ -281,7 +380,15 @@ class CellMutCollection:
             scores.reset_index().to_csv(f"{self.output_dir}/csv/{variant}.csv")
         return failed_args
 
-    def get_all_variant_scores(self):
+    def get_all_variant_scores(self) -> pd.DataFrame:
+        """
+        Get the scores for all variants.
+
+        Returns
+        -------
+        pd.DataFrame
+            The scores for all variants.
+        """
         scores = []
         failed_args = []
 
@@ -317,7 +424,24 @@ class CellMutCollection:
         scores = pd.concat(scores, axis=0)
         return scores
 
-    def get_nearby_variants(self, variant, distance=2000):
+    def get_nearby_variants(
+        self, variant, distance=2000
+    ) -> tuple[Mutations, list[str], list[str]]:
+        """
+        Get the nearby variants for a given variant.
+
+        Parameters
+        ----------
+        variant : str
+            The variant.
+        distance : int, optional
+            The distance to search for nearby variants, by default 2000
+
+        Returns
+        -------
+        tuple[Mutations, list[str], list[str]]
+            The nearby variants.
+        """
         chrom = self.variant_muts.df.query(f'RSID=="{variant}"')["Chromosome"].values[0]
         start = (
             self.variant_muts.df.query(f'RSID=="{variant}"')["Start"].values[0]
@@ -389,7 +513,24 @@ class CellMutCollection:
         else:
             return [Mutations(self.genome, None), processed_rsids, failed_rsids]
 
-    def get_nearby_genes(self, variant, cell_id, distance=2000000):
+    def get_nearby_genes(self, variant, cell_id, distance=2000000) -> list[str]:
+        """
+        Get the nearby genes for a given variant.
+
+        Parameters
+        ----------
+        variant : str
+            The variant.
+        cell_id : str
+            The cell type.
+        distance : int, optional
+            The distance to search for nearby genes, by default 2000000
+
+        Returns
+        -------
+        list[str]
+            The nearby genes.
+        """
         if cell_id in self.celltype_cache:
             cell = self.celltype_cache[cell_id]
         else:
@@ -420,9 +561,7 @@ class GETHydraCellMutCollection(CellMutCollection):
             / cfg.run.run_name
             / "variant_analysis"
         )
-        self.get_config_path = pkg_resources.resource_filename(
-            "gcell", "config/interpret.yaml"
-        )
+        self.get_config_path = "local_interpret"
         self.genome_path = cfg.machine.fasta_path
         self.num_workers = cfg.machine.num_workers
         self.debug = False
@@ -431,7 +570,6 @@ class GETHydraCellMutCollection(CellMutCollection):
         self.celltype_list = [hydra_celltype.celltype]
         self.celltype_annot_dict = {hydra_celltype.celltype: hydra_celltype.celltype}
         self.setup_directories()
-        # self.setup_model()
         self.setup_genome_and_motif()
         self.setup_variants()
 

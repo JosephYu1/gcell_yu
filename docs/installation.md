@@ -17,18 +17,6 @@ $ pip install 'gcell'
 ```
 :::
 
-:::{group-tab} Conda
-After installing installing e.g. [Miniconda][], run:
-
-```console
-$ conda install -c conda-forge gcell python-igraph leidenalg
-```
-
-Pull gcell [from PyPI][] (consider using `pip3` to access Python 3):
-
-```console
-$ pip install gcell
-```
 
 [miniconda]: https://docs.anaconda.com/miniconda/miniconda-install/
 [from pypi]: https://pypi.org/project/gcell

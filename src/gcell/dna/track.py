@@ -1,3 +1,15 @@
+"""
+Module for handling genomic tracks.
+
+Classes
+-------
+Track: A class to represent and manipulate genomic track data.
+
+Functions
+---------
+get_iqr_threshold: Get the IQR threshold for a specific track for peak calling.
+"""
+
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -6,7 +18,6 @@ import pandas as pd
 import pyBigWig
 from matplotlib import gridspec
 
-from ..rna.gencode import Gencode
 from .genome import ChromSize
 
 
@@ -14,13 +25,18 @@ def get_iqr_threshold(
     track, min_length=100, merge_length=100, return_indices=True, iqr_factor=1.2
 ):
     """
-    Get the IQR threshold for a specific track.
+    Get the IQR threshold for a specific track for peak calling.
 
-    Args:
-        track (np.ndarray): The track data.
-        min_length (int, optional): The minimum length of a peak. Defaults to 100.
-        merge_length (int, optional): The maximum distance to merge consecutive peaks. Defaults to 100.
-        return_indices (bool, optional): Whether to return the indices of the peaks. Defaults to True.
+    Parameters
+    ----------
+    track : np.ndarray
+        The track data.
+    min_length : int, optional
+        The minimum length of a peak. Defaults to 100.
+    merge_length : int, optional
+        The maximum distance to merge consecutive peaks. Defaults to 100.
+    return_indices : bool, optional
+        Whether to return the indices of the peaks. Defaults to True.
     """
     Q1, Q3 = np.percentile(track, [25, 75])
     IQR = Q3 - Q1
@@ -58,17 +74,6 @@ class Track:
     This class handles genomic track data, including normalization, convolution,
     and visualization. It supports multiple tracks and provides methods for
     plotting, generating bedGraph and BigWig files.
-
-    Attributes:
-        chrom (str): The chromosome name.
-        start (int): The start position of the track.
-        end (int): The end position of the track.
-        assembly (str): The genome assembly name.
-        conv_size (int): The size of the convolution window.
-        tracks (dict): A dictionary of track data, where keys are track labels and values are numpy arrays.
-        ids (list): A list of track labels.
-        normalize_factor (dict, optional): A dictionary of normalization factors for each track.
-        convoluted_tracks (dict): A dictionary of convolved track data.
     """
 
     def __init__(
@@ -77,13 +82,20 @@ class Track:
         """
         Initialize a Track object.
 
-        Args:
-            chrom (str): The chromosome name.
-            start (int): The start position of the track.
-            end (int): The end position of the track.
-            assembly (str): The genome assembly name.
-            tracks (dict): A dictionary of track data.
-            normalize_factor (dict, optional): A dictionary of normalization factors for each track. Defaults to None.
+        Parameters
+        ----------
+        chrom : str
+            The chromosome name.
+        start : int
+            The start position of the track.
+        end : int
+            The end position of the track.
+        assembly : str
+            The genome assembly name.
+        tracks : dict
+            A dictionary of track data.
+        normalize_factor : dict, optional
+            A dictionary of normalization factors for each track. Defaults to None.
             conv_size (int, optional): The size of the convolution window. Defaults to 50.
         """
         self.chrom = chrom
@@ -119,8 +131,10 @@ class Track:
         """
         Return a string representation of the Track object.
 
-        Returns:
-            str: A string representation of the Track object.
+        Returns
+        -------
+        str
+            A string representation of the Track object.
         """
         return (
             f"Track(chrom='{self.chrom}', start={self.start}, end={self.end}, "
@@ -131,8 +145,9 @@ class Track:
         """
         Perform a sanity check on the track data.
 
-        Raises:
-            ValueError: If the length of any track doesn't match the expected length.
+        Raises
+        ------
+        ValueError: If the length of any track doesn't match the expected length.
         """
         expected_length = self.end - self.start
         for label, y in self.tracks.items():
@@ -145,6 +160,11 @@ class Track:
     def conv_size(self):
         """
         Get the convolution window size.
+
+        Returns
+        -------
+        int
+            The convolution window size.
         """
         return self._conv_size
 
@@ -153,8 +173,10 @@ class Track:
         """
         Set a new convolution size and recalculate convolved tracks.
 
-        Args:
-            size (int): The new convolution window size.
+        Parameters
+        ----------
+        size : int
+            The new convolution window size.
         """
         self._conv_size = size
         self.convoluted_tracks = {
@@ -165,7 +187,7 @@ class Track:
     def plot_tracks(
         self,
         color_dict=None,
-        gene_annot: Gencode = None,
+        gene_annot=None,
         genes_to_highlight=None,
         beds=None,
         out_file=None,
@@ -174,12 +196,18 @@ class Track:
         """
         Plot the convolved tracks and optionally add gene annotations.
 
-        Args:
-            color_dict (dict, optional): A dictionary mapping track labels to colors. Defaults to None.
-            gene_annot (Gencode, optional): A GTF object containing gene annotations. Defaults to None.
-            genes_to_highlight (list, optional): A list of gene names to highlight. Defaults to None.
-            beds (list, optional): A list of BED objects containing regions to plot. Defaults to None.
-            out_file (str, optional): The path to save the output plot. Defaults to None.
+        Parameters
+        ----------
+        color_dict : dict, optional
+            A dictionary mapping track labels to colors. Defaults to None.
+        gene_annot : Gencode, optional
+            A GTF object containing gene annotations. Defaults to None.
+        genes_to_highlight : list, optional
+            A list of gene names to highlight. Defaults to None.
+        beds : list, optional
+            A list of BED objects containing regions to plot. Defaults to None.
+        out_file : str, optional
+            The path to save the output plot. Defaults to None.
         """
         num_tracks = len(self.convoluted_tracks)
         additional_tracks = 0
@@ -362,13 +390,20 @@ class Track:
         """
         Plot tracks with motif density.
 
-        Args:
-            chr (str): The chromosome name.
-            start (int): The start position of the track.
-            end (int): The end position of the track.
-            motif_zarr_path (str): The path to the motif Zarr file.
-            cutoff_quantile (float, optional): The quantile to cutoff the motif density. Defaults to 0.99.
-            conv_size (int, optional): The size of the convolution window. Defaults to 100.
+        Parameters
+        ----------
+        chr : str
+            The chromosome name.
+        start : int
+            The start position of the track.
+        end : int
+            The end position of the track.
+        motif_zarr_path : str
+            The path to the motif Zarr file.
+        cutoff_quantile : float, optional
+            The quantile to cutoff the motif density. Defaults to 0.99.
+        conv_size : int, optional
+            The size of the convolution window. Defaults to 100.
         """
         # Get motif density
         try:
@@ -404,14 +439,20 @@ class Track:
         """
         Get local IQR peaks for a specific track.
 
-        Args:
-            label (str): The label of the track to get the local IQR peaks for, or 'agg' for the aggregated track.
-            min_length (int, optional): The minimum length of a peak. Defaults to 100.
-            merge_length (int, optional): The maximum distance to merge consecutive peaks. Defaults to 100.
-            return_indices (bool, optional): Whether to return the indices of the peaks. Defaults to True.
+        Parameters
+        ----------
+        label : str
+            The label of the track to get the local IQR peaks for, or 'agg' for the aggregated track.
+        min_length : int, optional
+            The minimum length of a peak. Defaults to 100.
+        merge_length : int, optional
+            The maximum distance to merge consecutive peaks. Defaults to 100.
+        return_indices : bool, optional
+            Whether to return the indices of the peaks. Defaults to True.
 
-        Returns:
-            np.ndarray: An array of local IQR peaks.
+        Returns
+        -------
+        np.ndarray: An array of local IQR peaks.
         """
         if label == "agg":
             y = self.convoluted_tracks_agg
@@ -432,12 +473,16 @@ class Track:
         """
         Generate a bedGraph file for a specific track.
 
-        Args:
-            label (str): The label of the track to generate the bedGraph for.
-            out_file (str): The output file path.
+        Parameters
+        ----------
+        label : str
+            The label of the track to generate the bedGraph for.
+        out_file : str
+            The output file path.
 
-        Raises:
-            ValueError: If the specified label is not found in the tracks.
+        Raises
+        ------
+        ValueError: If the specified label is not found in the tracks.
         """
         if label not in self.tracks:
             raise ValueError(f"Label {label} not found in tracks")
@@ -450,12 +495,16 @@ class Track:
         """
         Generate a BigWig file for a specific track.
 
-        Args:
-            label (str): The label of the track to generate the BigWig for.
-            out_file (str): The output file path.
+        Parameters
+        ----------
+        label : str
+            The label of the track to generate the BigWig for.
+        out_file : str
+            The output file path.
 
-        Raises:
-            ValueError: If the specified label is not found in the tracks.
+        Raises
+        ------
+        ValueError: If the specified label is not found in the tracks.
         """
         if label not in self.tracks:
             raise ValueError(f"Label {label} not found in tracks")

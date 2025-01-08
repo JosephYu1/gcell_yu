@@ -1,3 +1,14 @@
+"""
+Module for handling gene data.
+
+Classes
+-------
+Gene: A class to represent a gene with TSS information.
+TSS: A class to represent a transcription start site (TSS).
+GeneExp: A class to represent a gene with expression data.
+GeneSets: A class to represent a collection of genes.
+"""
+
 from collections.abc import Collection
 from concurrent.futures import ProcessPoolExecutor
 
@@ -5,9 +16,74 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
+from ..dna.track import Track
+
+
+class TSS:
+    """A class to represent a transcription start site (TSS)."""
+
+    def __init__(self, name, peak_id, chrom, start, strand) -> None:
+        """Initialize the TSS class.
+
+        Parameters
+        ----------
+        name : str
+            The name of the TSS.
+        peak_id : int
+            The ID of the TSS.
+        chrom : str
+            The chromosome of the TSS.
+        start : int
+            The start position of the TSS.
+        strand : str
+            The strand of the TSS.
+        """
+        self.name = name
+        self.peak_id = peak_id
+        self.chrom = chrom
+        self.start = start
+        self.strand = strand
+
+    def __repr__(self) -> str:
+        return f"TSS(name={self.name}, peak_id={self.peak_id}, chrom={self.chrom}, strand={self.strand}, start={str(self.start)})"
+
+    def get_sample_from_peak(self, peak_df, focus=100) -> pd.DataFrame:
+        """Get the sample from the peak_df, with the peak_id as the center, and focus as the window size
+
+        Parameters
+        ----------
+        peak_df: pd.DataFrame
+            The peak dataframe.
+        focus: int
+            The window size.
+
+        Returns
+        -------
+        pd.DataFrame
+            The sample from the peak_df.
+        """
+        return peak_df.iloc[self.peak_id - focus : self.peak_id + focus]
+
 
 class Gene:
+    """A class to represent a gene with TSS information."""
+
     def __init__(self, name, id, chrom, strand, tss_list) -> None:
+        """Initialize the Gene class.
+
+        Parameters
+        ----------
+        name
+            The name of the gene.
+        id
+            The ID of the gene.
+        chrom
+            The chromosome of the gene.
+        strand
+            The strand of the gene.
+        tss_list
+            The TSS list of the gene.
+        """
         self.name = name
         self.id = id
         self.chrom = chrom
@@ -25,15 +101,23 @@ class Gene:
         )
 
     @property
-    def tss(self):
-        # return a list of TSS objects
+    def tss(self) -> list[TSS]:
+        """Get the TSS list for the gene.
+
+        Returns
+        -------
+        list[TSS]
+            The list of TSS objects.
+        """
         return [
             TSS(self.name, self.id, self.chrom, self.strand, start)
             for start in self.tss_list.Start.values
         ]
 
     @property
-    def genomic_range(self, upstream=128 * 8192, downstream=128 * 8192):
+    def genomic_range(
+        self, upstream=128 * 8192, downstream=128 * 8192
+    ) -> tuple[str, int, int, str]:
         return (
             self.chrom,
             self.tss_list.Start.min() - upstream,
@@ -67,7 +151,7 @@ class Gene:
 
     def get_track_obj(
         self, track, upstream=128 * 8192, downstream=128 * 8192, **kwargs
-    ):
+    ) -> Track:
         return track.get_track_obj(
             chr_name=self.chrom,
             start=self.tss_list.Start.min() - upstream,
@@ -75,7 +159,9 @@ class Gene:
             **kwargs,
         )
 
-    def get_tss_track_obj(self, track, upstream=1000, downstream=1000, **kwargs):
+    def get_tss_track_obj(
+        self, track, upstream=1000, downstream=1000, **kwargs
+    ) -> Track:
         if self.strand == "+":
             return track.get_track_obj(
                 chr_name=self.chrom,
@@ -92,26 +178,27 @@ class Gene:
             )
 
 
-class TSS:
-    def __init__(self, name, peak_id, chrom, start, strand) -> None:
-        self.name = name
-        self.peak_id = peak_id
-        self.chrom = chrom
-        self.start = start
-        self.strand = strand
-
-    def __repr__(self) -> str:
-        return f"TSS(name={self.name}, peak_id={self.peak_id}, chrom={self.chrom}, strand={self.strand}, start={str(self.start)})"
-
-    def get_sample_from_peak(self, peak_df, focus=100):
-        """Get the sample from the peak_df, with the peak_id as the center, and focus as the window size."""
-        return peak_df.iloc[self.peak_id - focus : self.peak_id + focus]
-
-
 class GeneExp(Gene):
-    """Gene with expression data."""
+    """A class to represent a gene with expression data. Not very useful."""
 
     def __init__(self, name, id, chrom, strand, tss_list, exp_list) -> None:
+        """Initialize the GeneExp class.
+
+        Parameters
+        ----------
+        name : str
+            The name of the gene.
+        id : str
+            The ID of the gene.
+        chrom : str
+            The chromosome of the gene.
+        strand : str
+            The strand of the gene.
+        tss_list : pd.DataFrame
+            The TSS list of the gene.
+        exp_list : pd.DataFrame
+            The expression list of the gene.
+        """
         super().__init__(name, id, chrom, strand, tss_list)
         self.exp_list = exp_list
 
@@ -132,6 +219,13 @@ class GeneSets(Collection):
     """A collection of Genes, initialized from a list of Gene objects or Gene names"""
 
     def __init__(self, genes: Collection[Gene]) -> None:
+        """Initialize the GeneSets class.
+
+        Parameters
+        ----------
+        genes : Collection[Gene]
+            The list of Gene objects.
+        """
         self.gene_names = [gene.name for gene in genes]
         self.gene_ids = [gene.id for gene in genes]
         self.data = dict(zip(self.gene_names, genes))
@@ -151,7 +245,22 @@ class GeneSets(Collection):
     def __repr__(self) -> str:
         return "GeneSets(gene_names={})".format(",".join(self.gene_names))
 
-    def get_tss_track(self, track, upstream=1000, downstream=1000, n_jobs=96, **kwargs):
+    def get_tss_track(
+        self, track, upstream=1000, downstream=1000, n_jobs=96, **kwargs
+    ) -> np.ndarray:
+        """Get the TSS track for the gene sets.
+
+        Parameters
+        ----------
+        track: Track
+            The track object.
+        upstream: int
+            The upstream window size.
+        downstream: int
+            The downstream window size.
+        n_jobs: int
+            The number of jobs to run in parallel.
+        """
         results = []
         tss_df = []
         with ProcessPoolExecutor(n_jobs) as executor:

@@ -16,15 +16,18 @@ class InterProAPI:
     def _make_request(self, endpoint: str, params: dict | None = None) -> dict:
         """Make a request to the InterPro API.
 
-        Args:
-            endpoint: API endpoint to query
-            params: Optional query parameters
+        Parameters
+        ----------
+        endpoint: API endpoint to query
+        params: Optional query parameters
 
-        Returns:
-            JSON response from the API
+        Returns
+        -------
+        JSON response from the API
 
-        Raises:
-            requests.exceptions.RequestException: If the API request fails
+        Raises
+        ------
+        requests.exceptions.RequestException: If the API request fails
         """
         url = f"{self.base_url}/{endpoint}"
         try:
@@ -38,10 +41,12 @@ class InterProAPI:
     def get_protein_entries(self, uniprot_id: str) -> pd.DataFrame:
         """Get all InterPro entries for a protein.
 
-        Args:
-            uniprot_id: UniProt accession ID
+        Parameters
+        ----------
+        uniprot_id: UniProt accession ID
 
-        Returns:
+        Returns
+        -------
             DataFrame containing entry information including:
             - Entry ID
             - Entry type
@@ -92,11 +97,13 @@ class InterProAPI:
     def get_entry_info(self, entry_id: str) -> dict:
         """Get detailed information about an InterPro entry.
 
-        Args:
-            entry_id: InterPro entry ID (e.g., IPR000001)
+        Parameters
+        ----------
+        entry_id: InterPro entry ID (e.g., IPR000001)
 
-        Returns:
-            Dictionary containing entry information
+        Returns
+        -------
+        Dictionary containing entry information
         """
         endpoint = f"entry/interpro/{entry_id}"
         return self._make_request(endpoint)
@@ -104,12 +111,14 @@ class InterProAPI:
     def search_by_name(self, query: str, entry_type: str | None = None) -> pd.DataFrame:
         """Search InterPro entries by name/description.
 
-        Args:
-            query: Search term
-            entry_type: Optional filter by entry type (e.g., "Domain", "Family", "Repeat")
+        Parameters
+        ----------
+        query: Search term
+        entry_type: Optional filter by entry type (e.g., "Domain", "Family", "Repeat")
 
-        Returns:
-            DataFrame containing matching entries
+        Returns
+        -------
+        DataFrame containing matching entries
         """
         endpoint = "entry/interpro"
         params = {"search": query}
@@ -135,11 +144,13 @@ class InterProAPI:
     def get_domain_architecture(self, uniprot_id: str) -> pd.DataFrame:
         """Get the domain architecture of a protein.
 
-        Args:
-            uniprot_id: UniProt accession ID
+        Parameters
+        ----------
+        uniprot_id: UniProt accession ID
 
-        Returns:
-            DataFrame containing ordered domain information
+        Returns
+        -------
+        DataFrame containing ordered domain information
         """
         df = self.get_protein_entries(uniprot_id)
         if not df.empty:
@@ -151,10 +162,12 @@ class InterProAPI:
     def get_protein_families(self, uniprot_id: str) -> pd.DataFrame:
         """Get protein family classifications.
 
-        Args:
-            uniprot_id: UniProt accession ID
+        Parameters
+        ----------
+        uniprot_id: UniProt accession ID
 
-        Returns:
+        Returns
+        -------
             DataFrame containing family information
         """
         df = self.get_protein_entries(uniprot_id)
@@ -167,10 +180,12 @@ class InterProAPI:
     def get_protein_go_terms(self, uniprot_id: str) -> list[dict]:
         """Get GO terms associated with protein's InterPro entries.
 
-        Args:
-            uniprot_id: UniProt accession ID
+        Parameters
+        ----------
+        uniprot_id: UniProt accession ID
 
-        Returns:
+        Returns
+        -------
             List of dictionaries containing GO term information
         """
         endpoint = f"protein/uniprot/{uniprot_id}/"

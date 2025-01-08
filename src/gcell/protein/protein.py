@@ -1,3 +1,16 @@
+"""
+Protein class for handling protein data and performing various operations.
+This is a work-in-progress.
+
+Classes
+-------
+Protein: Class for handling protein data and performing various operations
+
+Functions
+---------
+generate_pair_sequence: Generate pair sequence from two proteins, segmenting the sequence into regions with low or high pLDDT
+"""
+
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -24,7 +37,17 @@ bioparser = PDBParser()
 
 
 def generate_pair_sequence(P1, P2, output_dir):
-    """generate pair sequence from row"""
+    """generate pair sequence from row, segmenting the sequence into regions with low or high pLDDT
+
+    Parameters
+    ----------
+    P1: str
+        First protein
+    P2: str
+        Second protein
+    output_dir: str
+        Output directory
+    """
     protein_a = Protein(P1)
     protein_b = Protein(P2)
     low_or_high_plddt_region_sequence_a = protein_a.low_or_high_plddt_region_sequence
@@ -43,7 +66,7 @@ def generate_pair_sequence(P1, P2, output_dir):
 
 
 class Protein:
-    """Protein class"""
+    """Protein class for handling protein data and performing various operations"""
 
     def __init__(
         self,
@@ -56,10 +79,15 @@ class Protein:
         window_size=10,
     ):
         """
-        Args:
-            gene_name (str): gene name
-            homodimer (bool): whether to use homodimer structure
-            use_es (bool): whether to use ES score
+        Parameters
+        ----------
+        gene_name (str): gene name
+        homodimer (bool): whether to use homodimer structure
+        use_es (bool): whether to use ES score
+        esm_folder (str): path to ESM1b model
+        af2_folder (str): path to AF2 model
+        xml_dir (str): path to uniprot XML directory
+        window_size (int): size of mutation window
         """
         self.gene_name = gene_name
         self.window_size = window_size
@@ -184,9 +212,19 @@ class Protein:
 
     @property
     def low_or_high_plddt_region(self, threshold=0.6):
-        """Get regions with low plddt and high plddt, define breakpoint by merge regions if they are close (<30bp apart)
-        Note: if the last region is close to the end, merge it with the second last region
-        If the second last region has already been removed, ignore it"""
+        """
+        Get regions with low plddt and high plddt, define breakpoint by merge regions if they are close (<30bp apart)
+
+        Parameters
+        ----------
+        threshold: float
+            Threshold for pLDDT, default is 0.6
+
+        Note
+        -----
+        if the last region is close to the end, merge it with the second last region
+        If the second last region has already been removed, ignore it
+        """
         # get regions list from low_plddt_region, keep also high plddt regions
         region_breakpoint = list(np.concatenate(self.low_plddt_region))
         # add 0 if not in the list
@@ -218,6 +256,14 @@ class Protein:
 
     @property
     def low_or_high_plddt_region_sequence(self, threshold=0.6):
+        """
+        Get sequence of low or high pLDDT regions
+
+        Parameters
+        ----------
+        threshold: float
+            Threshold for pLDDT, default is 0.6
+        """
         # get regions list from low_plddt_region, keep also high plddt regions
         sequences = []
         for i, region in enumerate(self.low_or_high_plddt_region):
@@ -238,13 +284,16 @@ class Protein:
 
     @property
     def negative_charge_residue(self):
+        """Get negative charge residues"""
         return np.isin(np.array(self.sequence), ["D", "E"])
 
     @property
     def positive_charge_residue(self):
+        """Get positive charge residues"""
         return np.isin(np.array(self.sequence), ["R", "K", "H"])
 
     def get_final_score_gated_grad_3d(self, interaction_threshold=20):
+        """Get final score gated by gradient and ES score"""
         f = self.grad * self.esm
         pairwise_interaction = self.pairwise_distance < interaction_threshold
         f[(self.smoothed_plddt < 0.5)] = 0
@@ -256,6 +305,7 @@ class Protein:
     def get_pairwise_distance(
         self, dimer=False, af2_folder="/manitou/pmg/users/xf2217/demo_data/af2"
     ):
+        """Get pairwise distance between residues"""
         if dimer:
             structure = bioparser.get_structure(
                 "homodimer", f"{af2_folder}/dimer_structures/" + self.gene_name + ".pdb"
@@ -354,6 +404,29 @@ class Protein:
             "short sequence motif",
         ],
     ):
+        """Plot pLDDT using Plotly, highlight specified positions and domains
+
+        Parameters
+        ----------
+        pos_to_highlight: list of int
+            Positions to highlight
+        to_compare: list of float
+            Data to compare with
+        filename: str
+            Filename to save the plot
+        show_low_plddt: bool
+            Whether to show low pLDDT regions
+        show_domain: bool
+            Whether to show domains from Uniprot
+        domains_to_show: list of str
+            Types of domains to show. Default is ["region of interest", "DNA-binding region", "short sequence motif"].
+            They are Uniprot feature types.
+
+        Returns
+        -------
+        fig: plotly.graph_objects.Figure
+            Plotly figure
+        """
         # Initialize Plotly Figure
         fig = go.Figure()
 
@@ -483,6 +556,15 @@ class Protein:
         return fig
 
     def plot_plddt_manuscript(self, to_compare=None, filename=None):
+        """Plot pLDDT for manuscript
+
+        Parameters
+        ----------
+        to_compare: list of float
+            Data to compare with
+        filename: str
+            Filename to save the plot
+        """
         plt.figure(figsize=(12, 3))
         plt.plot(self.plddt)
         if to_compare is not None:
@@ -553,6 +635,24 @@ class Protein:
         show_domain=True,
         domains_to_show=["region of interest", "DNA-binding region", "splice variant"],
     ):
+        """Plot pLDDT using matplotlib
+
+        Parameters
+        ----------
+        pos_to_highlight: list of int
+            Positions to highlight
+        to_compare: list of float
+            Data to compare with
+        filename: str
+            Filename to save the plot
+        show_low_plddt: bool
+            Whether to show low pLDDT regions
+        show_domain: bool
+            Whether to show domains from Uniprot
+        domains_to_show: list of str
+            Types of domains to show. Default is ["region of interest", "DNA-binding region", "short sequence motif"].
+            They are Uniprot feature types.
+        """
         fig, ax = plt.subplots(figsize=(20, 5))
         plt.plot(self.smoothed_plddt, label="pLDDT", color="orange")
         if to_compare is not None:

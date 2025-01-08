@@ -1,14 +1,14 @@
-# Protein Module
-
 ```{eval-rst}
 .. module:: gcell.protein
 ```
 
-The Protein module provides functionality for working with protein sequences, structures, and AlphaFold2 predictions.
+# Protein Module API Documentation
 
 ```{eval-rst}
 .. currentmodule:: gcell.protein
 ```
+
+The Protein module provides functionality for working with protein sequences, structures, and AlphaFold2 predictions.
 
 ## Core Functions
 
@@ -26,12 +26,11 @@ The Protein module provides functionality for working with protein sequences, st
 
 ### Protein Class
 
-Base class for working with protein sequences and AlphaFold2 predictions.
-
-Key methods:
-- `plot_plddt()`: Plots pLDDT scores with optional domain annotations
-- `plotly_plddt()`: Interactive Plotly version of pLDDT plot
-- `get_domain_from_uniprot()`: Gets domain information from UniProt
+- **Description**: Base class for working with protein sequences and AlphaFold2 predictions.
+- **Key Methods**:
+  - `plot_plddt()`: Plots pLDDT scores with optional domain annotations.
+  - `plotly_plddt()`: Interactive Plotly version of pLDDT plot.
+  - `get_domain_from_uniprot()`: Gets domain information from UniProt.
 
 ```{eval-rst}
 .. currentmodule:: gcell.protein.uniprot
@@ -49,13 +48,12 @@ Key methods:
 
 ### UniProtAPI
 
-Class for interacting with the UniProt REST API.
-
-Key methods:
-- `get_uniprot_id()`: Gets UniProt ID from gene name
-- `get_protein_sequence()`: Gets protein sequence from UniProt ID
-- `get_domains()`: Gets domain information for a protein
-- `get_protein_info()`: Gets detailed protein information
+- **Description**: Class for interacting with the UniProt REST API.
+- **Key Methods**:
+  - `get_uniprot_id()`: Gets UniProt ID from gene name.
+  - `get_protein_sequence()`: Gets protein sequence from UniProt ID.
+  - `get_domains()`: Gets domain information for a protein.
+  - `get_protein_info()`: Gets detailed protein information.
 
 ```{eval-rst}
 .. currentmodule:: gcell.protein.af2
@@ -77,22 +75,20 @@ Key methods:
 
 ### AFResult
 
-Base class for analyzing AlphaFold2 prediction results.
-
-Key attributes:
-- `plddt`: Per-residue pLDDT confidence scores
-- `pae`: Predicted Aligned Error matrix
-- `iptm`: Interface TM-score
-- `ptm`: Predicted TM-score
+- **Description**: Base class for analyzing AlphaFold2 prediction results.
+- **Key Attributes**:
+  - `plddt`: Per-residue pLDDT confidence scores.
+  - `pae`: Predicted Aligned Error matrix.
+  - `iptm`: Interface TM-score.
+  - `ptm`: Predicted TM-score.
 
 ### AFPairseg
 
-Class for analyzing AlphaFold2 predictions of protein segment pairs.
-
-Key methods:
-- `plot_plddt_gene1()`: Plots pLDDT scores for first protein
-- `plot_plddt_gene2()`: Plots pLDDT scores for second protein
-- `plot_score_heatmap()`: Plots heatmap of interaction scores
+- **Description**: Class for analyzing AlphaFold2 predictions of protein segment pairs.
+- **Key Methods**:
+  - `plot_plddt_gene1()`: Plots pLDDT scores for first protein.
+  - `plot_plddt_gene2()`: Plots pLDDT scores for second protein.
+  - `plot_score_heatmap()`: Plots heatmap of interaction scores.
 
 ## Data Management
 

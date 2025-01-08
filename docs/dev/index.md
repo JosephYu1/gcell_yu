@@ -10,7 +10,6 @@ code
 getting-set-up
 testing
 documentation
-ci
 versioning
 release
 ```

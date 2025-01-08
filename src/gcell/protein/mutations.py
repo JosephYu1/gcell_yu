@@ -1,3 +1,12 @@
+"""
+Module for protein sequence mutations.
+
+Classes
+-------
+ProteinSequenceManipulator: Class for manipulating protein sequences
+SequenceMutation: Class to store information about a sequence mutation
+"""
+
 import random
 from copy import deepcopy
 from dataclasses import dataclass
@@ -25,7 +34,16 @@ class SequenceMutation:
 
 
 class ProteinSequenceManipulator:
-    """Class for manipulating protein sequences"""
+    """Class for manipulating protein sequences
+
+    Methods
+    -------
+    validate_sequence: Validate that sequence only contains valid amino acids
+    delete_range: Delete a range of amino acids from the sequence
+    shuffle_range: Shuffle amino acids within a range
+    random_aa_range: Replace a range with random amino acids
+    alanine_scan_range: Replace a range with alanines (A)
+    """
 
     # Standard amino acids
     AMINO_ACIDS = list("ACDEFGHIKLMNPQRSTVWY")
@@ -34,8 +52,9 @@ class ProteinSequenceManipulator:
         """
         Initialize with a protein sequence
 
-        Args:
-            sequence (str): Original protein sequence
+        Parameters
+        ----------
+        sequence (str): Original protein sequence
         """
         self.original_sequence = sequence
         self.validate_sequence(sequence)
@@ -45,10 +64,12 @@ class ProteinSequenceManipulator:
         """
         Validate that sequence only contains valid amino acids
 
-        Args:
-            sequence (str): Sequence to validate
+        Parameters
+        ----------
+        sequence (str): Sequence to validate
 
-        Raises:
+        Raises
+        ------
             ValueError: If invalid amino acids are found
         """
         invalid_chars = set(sequence.upper()) - set(
@@ -61,12 +82,14 @@ class ProteinSequenceManipulator:
         """
         Delete a range of amino acids from the sequence
 
-        Args:
-            start_idx (int): Start index (inclusive)
-            end_idx (int): End index (exclusive)
+        Parameters
+        ----------
+        start_idx (int): Start index (inclusive)
+        end_idx (int): End index (exclusive)
 
-        Returns:
-            SequenceMutation: Mutation information
+        Returns
+        -------
+        SequenceMutation: Mutation information
         """
         if not (
             0 <= start_idx < len(self.original_sequence)
@@ -96,12 +119,14 @@ class ProteinSequenceManipulator:
         """
         Shuffle amino acids within a range
 
-        Args:
-            start_idx (int): Start index (inclusive)
-            end_idx (int): End index (exclusive)
+        Parameters
+        ----------
+        start_idx (int): Start index (inclusive)
+        end_idx (int): End index (exclusive)
 
-        Returns:
-            SequenceMutation: Mutation information
+        Returns
+        -------
+        SequenceMutation: Mutation information
         """
         if not (
             0 <= start_idx < len(self.original_sequence)
@@ -137,12 +162,15 @@ class ProteinSequenceManipulator:
         """
         Replace a range with random amino acids
 
-        Args:
-            start_idx (int): Start index (inclusive)
-            end_idx (int): End index (exclusive)
+        Parameters
+        ----------
+        start_idx (int): Start index (inclusive)
+        end_idx (int): End index (exclusive)
 
-        Returns:
-            SequenceMutation: Mutation information
+
+        Returns
+        -------
+        SequenceMutation: Mutation information
         """
         if not (
             0 <= start_idx < len(self.original_sequence)
@@ -176,12 +204,15 @@ class ProteinSequenceManipulator:
         """
         Replace a range with alanines (A)
 
-        Args:
-            start_idx (int): Start index (inclusive)
-            end_idx (int): End index (exclusive)
+        Parameters
+        ----------
+        start_idx (int): Start index (inclusive)
+        end_idx (int): End index (exclusive)
 
-        Returns:
-            SequenceMutation: Mutation information
+
+        Returns
+        -------
+        SequenceMutation: Mutation information
         """
         if not (
             0 <= start_idx < len(self.original_sequence)
@@ -221,14 +252,16 @@ def exhaustive_mutation_scan(
     """
     Perform exhaustive mutation scan on a protein sequence
 
-    Args:
-        sequence (str): Protein sequence to mutate
-        mutation_type (MutationType): Type of mutation to perform
-        window_size (int): Size of mutation window
-        stride (int, optional): Stride for sliding window. If None, uses window_size
+    Parameters
+    ----------
+    sequence (str): Protein sequence to mutate
+    mutation_type (MutationType): Type of mutation to perform
+    window_size (int): Size of mutation window
+    stride (int, optional): Stride for sliding window. If None, uses window_size
 
-    Returns:
-        List[SequenceMutation]: List of all mutations
+    Returns
+    -------
+    List[SequenceMutation]: List of all mutations
     """
     if stride is None:
         stride = window_size

@@ -1,3 +1,20 @@
+"""
+Module for pathway analysis using gprofiler.
+
+Classes
+-------
+Pathways: Class to represent pathways loaded from a gmt file.
+
+Functions
+---------
+read_gmt_file: Read gmt file and return a dataframe with pathway id as index and gene set as value.
+get_tf_pathway: Get pathway for a pair of transcription factors.
+plot_geneset: Plot gene set expression.
+fisher_exact_test: Perform Fisher's exact test.
+hypergeometric_test: Perform hypergeometric test.
+plot_fold_enrichment_with_significance: Plot fold enrichment with significance.
+"""
+
 import re
 from pathlib import Path
 
@@ -9,13 +26,22 @@ from matplotlib import pyplot as plt
 from scipy.stats import fisher_exact, hypergeom
 
 from ..rna.gencode import Gencode
+from ..rna.gene import GeneSets
 
 gp = GProfiler(return_dataframe=True)
 
 
-def read_gmt_file(gmt_file):
+def read_gmt_file(gmt_file) -> pd.DataFrame:
     """
     Read gmt file and return a dataframe with pathway id as index and gene set as value.
+
+    Parameters
+    ----------
+    gmt_file: Path to the gmt file
+
+    Returns
+    -------
+    DataFrame: A dataframe with pathway id as index and gene set as value
     """
     pathway_dict = {}
     with Path(gmt_file).open() as f:
@@ -30,15 +56,7 @@ def read_gmt_file(gmt_file):
 
 
 class Pathways:
-    """A class to represent pathways loaded from a gmt file.
-
-    Attributes
-    ----------
-    pathways : DataFrame
-        A DataFrame with pathway information.
-    gencode : Gencode
-        An instance of the Gencode class.
-    """
+    """A class to represent pathways loaded from a gmt file."""
 
     def __init__(
         self,
@@ -78,7 +96,7 @@ class Pathways:
         )
         self.pathways = read_gmt_file(gmt_file)
 
-    def get_gene_sets(self, genes):
+    def get_gene_sets(self, genes) -> GeneSets:
         """Get GeneSets object from the list of genes."""
         return self.gencode.get_genes(genes)
 
@@ -86,7 +104,7 @@ class Pathways:
         """Return source of the pathways and number of pathways for each source."""
         return self.pathways.groupby("source").size().to_string()
 
-    def query_pathway(self, query_str="cell cycle"):
+    def query_pathway(self, query_str="cell cycle") -> pd.DataFrame:
         """Query a pathway using a string."""
         return self.pathways.query("description.str.contains(@query_str)")
 
@@ -143,7 +161,22 @@ def get_tf_pathway(tf1, tf2, cell, filter_str="term_size<1000 & term_size>100"):
 
 def plot_geneset(
     intersect_genes, ng_ball_exp, geneset, geneset_name, sample_category_name="G183S"
-):
+) -> plt.Figure:
+    """
+    Plot gene set expression.
+
+    Parameters
+    ----------
+    intersect_genes: List of intersect genes
+    ng_ball_exp: DataFrame of gene expression
+    geneset: List of genes in the gene set
+    geneset_name: Name of the gene set
+    sample_category_name: Name of the sample category
+
+    Returns
+    -------
+    Figure: A plot of gene set expression
+    """
     data = ng_ball_exp.loc[
         [g for g in intersect_genes if g in ng_ball_exp.index and g in geneset]
     ]
@@ -193,11 +226,20 @@ def plot_geneset(
     return plt
 
 
-def fisher_exact_test(set1, set2, background):
-    # Create a contingency table
-    set1 = set(set1)
-    set2 = set(set2)
-    background = set(background)
+def fisher_exact_test(set1, set2, background) -> tuple[float, float, float]:
+    """
+    Perform Fisher's exact test.
+
+    Parameters
+    ----------
+    set1: List of genes in the first set
+    set2: List of genes in the second set
+    background: List of genes in the background
+
+    Returns
+    -------
+    tuple: A tuple containing the p-value, fold enrichment, and odds ratio
+    """
     contingency_table = [
         [len(set1.intersection(set2)), len(set1.difference(set2))],
         [len(set2.difference(set1)), len(background.difference(set1.union(set2)))],
@@ -210,6 +252,19 @@ def fisher_exact_test(set1, set2, background):
 
 
 def hypergeometric_test(set1, set2, background):
+    """
+    Perform hypergeometric test.
+
+    Parameters
+    ----------
+    set1: List of genes in the first set
+    set2: List of genes in the second set
+    background: List of genes in the background
+
+    Returns
+    -------
+    tuple: A tuple containing the p-value and fold enrichment
+    """
     set1 = set(set1)
     set2 = set(set2)
     background = set(background)
@@ -224,7 +279,22 @@ def hypergeometric_test(set1, set2, background):
 
 def plot_fold_enrichment_with_significance(
     gene_lists, gene_list_names, df_genes, gene_annot, ax=None
-):
+) -> plt.Axes:
+    """
+    Plot fold enrichment with significance.
+
+    Parameters
+    ----------
+    gene_lists: List of gene lists
+    gene_list_names: List of gene list names
+    df_genes: DataFrame of genes
+    gene_annot: DataFrame of gene annotations
+    ax: Axes to plot on
+
+    Returns
+    -------
+    Axes: Axes with the plot
+    """
     p_values = {}
     ratios = {}
     for gene_list, gene_list_name in zip(gene_lists, gene_list_names):

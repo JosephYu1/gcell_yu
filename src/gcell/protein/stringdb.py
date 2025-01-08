@@ -20,42 +20,46 @@ def get_string_network(
     for a list of proteins. It can retrieve either physical or functional interaction
     networks for various species.
 
-    Args:
-        identifiers (list[str]): List of protein identifiers (gene symbols or STRING IDs).
-        species (str, optional): Species name for the proteins. Defaults to "human".
-            Supported species can be found in organism_to_uniprot dictionary.
-        network_type (str, optional): Type of interaction network. Defaults to "physical".
-            Options:
-                - "physical": Direct physical protein-protein interactions
-                - "functional": Both direct and indirect functional associations
-        required_score (int, optional): Minimum required interaction score (0-1000).
-            Defaults to 400. Higher scores indicate higher confidence:
-                - Low confidence: >150
-                - Medium confidence: >400
-                - High confidence: >700
-                - Highest confidence: >900
-        save_image (str | None, optional): If provided, saves the network visualization
-            to the specified file path. The file extension determines the format
-            (e.g., '.png', '.pdf', '.svg'). Defaults to None.
+    Parameters
+    ----------
+    identifiers (list[str]): List of protein identifiers (gene symbols or STRING IDs).
+    species (str, optional): Species name for the proteins. Defaults to "human".
+    Supported species can be found in organism_to_uniprot dictionary.
+    network_type (str, optional): Type of interaction network. Defaults to "physical".
+        Options:
+            - "physical": Direct physical protein-protein interactions
+            - "functional": Both direct and indirect functional associations
+    required_score (int, optional): Minimum required interaction score (0-1000).
+        Defaults to 400. Higher scores indicate higher confidence:
+            - Low confidence: >150
+            - Medium confidence: >400
+            - High confidence: >700
+            - Highest confidence: >900
+    save_image (str | None, optional): If provided, saves the network visualization
+        to the specified file path. The file extension determines the format
+        (e.g., '.png', '.pdf', '.svg'). Defaults to None.
 
-    Returns:
-        pd.DataFrame: DataFrame containing the interaction network data with columns:
-            - nodeId: STRING protein id of partner A
-            - stringId_A: STRING protein id of partner A
-            - stringId_B: STRING protein id of partner B
-            - score: Combined interaction score
-            Additional columns depend on the interaction type and score.
+    Returns
+    -------
+    pd.DataFrame: DataFrame containing the interaction network data with columns:
+        - nodeId: STRING protein id of partner A
+        - stringId_A: STRING protein id of partner A
+        - stringId_B: STRING protein id of partner B
+        - score: Combined interaction score
+        Additional columns depend on the interaction type and score.
 
-    Raises:
-        ValueError: If an unsupported network_type or species is provided.
-        requests.RequestException: If the image download fails.
+    Raises
+    ------
+    ValueError: If an unsupported network_type or species is provided.
+    requests.RequestException: If the image download fails.
 
-    Examples:
-        >>> # Get physical interactions and save network image
-        >>> network = get_string_network(
-        ...     ["PTCH1", "SHH", "GLI1"], save_image="hedgehog_network.png"
-        ... )
-        >>> # Get high-confidence functional interactions with PDF image
+    Examples
+    --------
+    >>> # Get physical interactions and save network image
+    >>> network = get_string_network(
+    ...     ["PTCH1", "SHH", "GLI1"], save_image="hedgehog_network.png"
+    ... )
+    >>> # Get high-confidence functional interactions with PDF image
         >>> mouse_network = get_string_network(
         ...     identifiers=["Ptch1", "Shh", "Gli1"],
         ...     species="mouse",
@@ -64,12 +68,13 @@ def get_string_network(
         ...     save_image="mouse_network.pdf",
         ... )
 
-    Notes:
-        - The STRING database API is queried at https://string-db.org
-        - Protein identifiers can be gene symbols or STRING IDs
-        - The returned interaction scores range from 0 to 1000
-        - See https://string-db.org/cgi/help for more details about score computation
-        - Network images are generated using STRING's image API
+    Notes
+    -----
+    - The STRING database API is queried at https://string-db.org
+    - Protein identifiers can be gene symbols or STRING IDs
+    - The returned interaction scores range from 0 to 1000
+    - See https://string-db.org/cgi/help for more details about score computation
+    - Network images are generated using STRING's image API
     """
     if network_type not in ["physical", "functional"]:
         raise ValueError(

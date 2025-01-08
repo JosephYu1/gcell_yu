@@ -48,20 +48,6 @@ Look at [sc.tl.louvain](https://github.com/GET-Foundation/gcell/blob/a811fee0ef4
 [napolean guide to numpy style docstrings]: https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_numpy.html#example-numpy
 [sphinx rst primer]: https://www.sphinx-doc.org/en/master/usage/restructuredtext/basics.html
 
-### Plots in docstrings
-
-One of the most useful things you can include in a docstring is examples of how the function should be used.
-These are a great way to demonstrate intended usage and give users a template they can copy and modify.
-We're able to include the plots produced by these snippets in the rendered docs using [matplotlib's plot directive][].
-For examples of this, see the `Examples` sections of {func}`~gcell.pl.dotplot` or {func}`~gcell.pp.calculate_qc_metrics`.
-
-Note that anything in these sections will need to be run when the docs are built, so please keep them computationally light.
-
-- If you need computed features (e.g. an embedding, differential expression results) load data that has this precomputed.
-- Try to re-use datasets, this reduces the amount of data that needs to be downloaded to the CI server.
-
-[matplotlib's plot directive]: https://matplotlib.org/devel/plot_directive.html
-
 ### `Params` section
 
 The `Params` abbreviation is a legit replacement for `Parameters`.
@@ -84,52 +70,3 @@ There are three types of return sections – prose, tuple, and a mix of both.
 1. Prose is for simple cases.
 2. Tuple return sections are formatted like parameters. Other than in numpydoc, each tuple is first characterized by the identifier and *not* by its type. Provide type annotation in the function header.
 3. Mix of prose and tuple is relevant in complicated cases, e.g. when you want to describe that you *added something as annotation to an \`AnnData\` object*.
-
-#### Examples
-
-For simple cases, use prose as in {func}`~gcell.pp.normalize_total`:
-
-```rst
-Returns
--------
-Returns dictionary with normalized copies of `adata.X` and `adata.layers`
-or updates `adata` with normalized versions of the original
-`adata.X` and `adata.layers`, depending on `inplace`.
-```
-
-For tuple return values, you can use the standard numpydoc way of populating it,
-e.g. as in {func}`~gcell.pp.calculate_qc_metrics`.
-Do not add types in the docstring, but specify them in the function signature:
-
-```python
-def myfunc(...) -> tuple[int, str]:
-    """
-    ...
-    Returns
-    -------
-    one_identifier
-        Description.
-    second_identifier
-        Description 2.
-    """
-    ...
-```
-
-Many functions also just modify parts of the passed AnnData object, like e.g. {func}`~gcell.tl.dpt`.
-You can then combine prose and lists to best describe what happens:
-
-```rst
-Returns
--------
-Depending on `copy`, returns or updates `adata` with the following fields.
-
-If `n_branchings==0`, no field `dpt_groups` will be written.
-
-dpt_pseudotime : :class:`~pandas.Series` (`adata.obs`, dtype `float`)
-    Array of dim (number of samples) that stores the pseudotime of each
-    cell, that is, the DPT distance with respect to the root cell.
-dpt_groups : :class:`pandas.Series` (`adata.obs`, dtype `category`)
-    Array of dim (number of samples) that stores the subgroup id ('0',
-    '1', ...) for each cell. The groups  typically correspond to
-    'progenitor cells', 'undecided cells' or 'branches' of a process.
-```

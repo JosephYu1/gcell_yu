@@ -1,0 +1,12 @@
+s3_uri: NULL
+s3_file_sys: NULL
+celltype:
+  features: "NrMotifV1"
+  num_region_per_sample: 200
+  data_dir: "pretrain_human_bingren_shendure_apr2023/fetal_adult/"
+  interpret_dir: "Interpretation_all_hg38_allembed_v4_natac/"
+  input: True
+  jacob: True
+  embed: True
+  assets_dir: "assets/"
+  num_cls: 2

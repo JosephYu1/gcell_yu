@@ -1,3 +1,4 @@
+# Template R script for lingam
 library(pcalg)
 
 dataset <- read.csv(file='{FOLDER}{FILE}', header=FALSE, sep=",");
