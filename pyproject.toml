@@ -103,7 +103,6 @@ doc = [
     "ipython>=7.20",  # for nbsphinx code highlighting
     "matplotlib!=3.6.1",
     "sphinxcontrib-bibtex",
-    "gcell",
     "setuptools", # undeclared dependency of sphinxcontrib-bibtex→pybtex
 ]
 gpu = [
