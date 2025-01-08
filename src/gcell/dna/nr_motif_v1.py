@@ -244,6 +244,34 @@ class NrMotifV1(MotifClusterCollection):
             pickle.dump(self.__getstate__(), f)
 
     @classmethod
+    def download_pickle(
+        cls,
+        file_path: str | Path = annotation_dir / "nr_motif_v1.pkl",
+        url: str = "https://zenodo.org/record/14614892/files/nr_motif_v1.pkl?download=1",
+    ):
+        """
+        Download the pickle file from Zenodo using pooch.
+
+        Parameters
+        ----------
+        file_path : Path or str, optional
+            Path where the pickle file will be saved
+        url : str, optional
+            URL to fetch the pickle file from
+        """
+        # Ensure the directory exists
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        from .._settings import POOCH
+
+        # Use pooch to download the file
+        POOCH.path = file_path.parent
+        POOCH.registry[file_path.name] = None  # No hash available
+        POOCH.urls[file_path.name] = url
+
+        # Fetch the file
+        POOCH.fetch(file_path.name)
+
+    @classmethod
     def load_from_pickle(
         cls,
         file_path: str | Path = annotation_dir / "nr_motif_v1.pkl",
@@ -268,6 +296,8 @@ class NrMotifV1(MotifClusterCollection):
         -----
         Creates motif directory if it doesn't exist and downloads required data.
         """
+        if not Path(file_path).exists():
+            cls.download_pickle(file_path)
         with Path(file_path).open("rb") as f:
             state = pd.read_pickle(f)
         instance = cls.__new__(cls)
