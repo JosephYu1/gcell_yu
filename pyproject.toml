@@ -120,6 +120,9 @@ packages = ["src/gcell"]
 [tool.hatch.build.hooks.vcs]
 version-file = "src/gcell/_version.py"
 
+[tool.setuptools.package-data]
+"gcell" = ["config/**/*.yaml", "**/*.yaml", "**/*.json", "config/*.yaml"]
+
 [tool.pytest.ini_options]
 addopts = [
     "--import-mode=importlib",
