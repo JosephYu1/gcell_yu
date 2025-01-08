@@ -51,6 +51,8 @@ dependencies = [
     "tqdm",
     "xmlschema",
     "zarr",
+    "nglview",
+    "py3Dmol",
 ]
 dynamic = ["version"]
 
@@ -81,11 +83,6 @@ dev = [
     "snapatac2",
     "scanpy",
     "scikit-misc",
-]
-demo = [
-    "nglview",
-    "dash-bio",
-    "py3Dmol",
 ]
 doc = [
     "sphinx>=7",
