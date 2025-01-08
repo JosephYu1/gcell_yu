@@ -6,13 +6,15 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import pkg_resources
 import s3fs
-from dash_bio import Clustergram
+from genomespy import GenomeSpy
 
 from gcell.cell.celltype import GETCellType
 from gcell.config.config import load_config
 from gcell.dna.nr_motif_v1 import NrMotifV1
 from gcell.protein.af2 import AFPairseg
 from gcell.utils.pdb_viewer import view_pdb_html
+
+gs = GenomeSpy()
 
 args = argparse.ArgumentParser()
 args.add_argument("-p", "--port", type=int, default=7860, help="Port number")
@@ -55,10 +57,7 @@ if args.s3_uri:  # Use S3 path if exists
     )
     gene_pairs = s3_file_sys.glob(f"{args.s3_uri}/structures/causal/*")
     gene_pairs = [Path(pair).name for pair in gene_pairs]
-    motif = NrMotifV1.load_from_pickle(
-        pkg_resources.resource_filename("gcell", "data/NrMotifV1.pkl"),
-        GET_CONFIG.celltype.motif_dir,
-    )
+    motif = NrMotifV1.load_from_pickle()
 else:  # Run with local data (deprecated, to updated to hydra-based config)
     s3_file_sys = None
     GET_CONFIG.celltype.data_dir = (
@@ -158,20 +157,20 @@ def plot_gene_exp(cell, plotly: bool = True):
     return cell.plotly_gene_exp(plotly=plotly), cell
 
 
-def plot_motif_corr(cell):
-    fig = Clustergram(
-        data=cell.gene_by_motif.corr.values,
-        column_labels=list(cell.gene_by_motif.corr.columns.values),
-        row_labels=list(cell.gene_by_motif.corr.index),
-        hidden_labels=["row", "col"],
-        # link_method="ward",
-        display_ratio=0.1,
-        width=600,
-        height=350,
-        color_map="rdbu_r",
-    )
-    fig["layout"].update(coloraxis_showscale=False)
-    return fig, cell
+# def plot_motif_corr(cell):
+#     fig = Clustergram(
+#         data=cell.gene_by_motif.corr.values,
+#         column_labels=list(cell.gene_by_motif.corr.columns.values),
+#         row_labels=list(cell.gene_by_motif.corr.index),
+#         hidden_labels=["row", "col"],
+#         # link_method="ward",
+#         display_ratio=0.1,
+#         width=600,
+#         height=350,
+#         color_map="rdbu_r",
+#     )
+#     fig["layout"].update(coloraxis_showscale=False)
+#     return fig, cell
 
 
 if __name__ == "__main__":
@@ -235,34 +234,28 @@ In simpler terms, when you observe a motif having a strong positive correlation 
 Overall, motif correlation analysis helps uncover potential regulatory relationships within a cell type by identifying motifs that are statistically linked to the expression patterns of genes. This can provide valuable insights into the functional interactions and regulatory mechanisms at play in that specific biological context.
 """
         )
-        with gr.Row() as row:
-            with gr.Column():
-                clustergram_btn = gr.Button(value="Plot motif correlation heatmap")
-                clustergram_plot = gr.Plot(label="Motif correlation")
 
-            # Right column: Motif subnet plot
-            with gr.Column():
-                with gr.Row() as row:
-                    motif_for_subnet = gr.Dropdown(
-                        label="Motif causal subnetwork",
-                        choices=motif.cluster_names,
-                        value="KLF/SP/2",
-                    )
-                    subnet_type = gr.Dropdown(
-                        label="Interaction type",
-                        choices=["neighbors", "parents", "children"],
-                        value="neighbors",
-                    )
-                    # slider for threshold 0.01-0.2
-                    subnet_threshold = gr.Slider(
-                        label="Threshold",
-                        minimum=0.01,
-                        maximum=0.25,
-                        step=0.01,
-                        value=0.1,
-                    )
-                subnet_btn = gr.Button(value="Plot Motif Causal Subnetwork")
-                subnet_plot = gr.Plot(label="Motif Causal Subnetwork")
+        with gr.Row() as row:
+            motif_for_subnet = gr.Dropdown(
+                label="Motif causal subnetwork",
+                choices=motif.cluster_names,
+                value="KLF/SP/2",
+            )
+            subnet_type = gr.Dropdown(
+                label="Interaction type",
+                choices=["neighbors", "parents", "children"],
+                value="neighbors",
+            )
+            # slider for threshold 0.01-0.2
+            subnet_threshold = gr.Slider(
+                label="Threshold",
+                minimum=0.01,
+                maximum=0.25,
+                step=0.01,
+                value=0.1,
+            )
+        subnet_btn = gr.Button(value="Plot Motif Causal Subnetwork")
+        subnet_plot = gr.Plot(label="Motif Causal Subnetwork")
 
         gr.Markdown(
             """
@@ -330,9 +323,9 @@ You can download specific segment pair PDB files by clicking 'Get PDB.'
             inputs=[cell, gene_name_for_region, gr.State(motif)],
             outputs=[motif_plot, cell],
         )
-        clustergram_btn.click(
-            plot_motif_corr, inputs=[cell], outputs=[clustergram_plot, cell]
-        )
+        # clustergram_btn.click(
+        #     plot_motif_corr, inputs=[cell], outputs=[clustergram_plot, cell]
+        # )
         subnet_btn.click(
             plot_motif_subnet,
             inputs=[

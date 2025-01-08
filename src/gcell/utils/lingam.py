@@ -10,7 +10,7 @@ from tempfile import gettempdir
 import networkx as nx
 from pandas import read_csv
 
-RPATH = "R"
+RPATH = "Rscript"
 
 
 def message_warning(msg, *a, **kwargs):
@@ -44,7 +44,11 @@ def launch_R_script(
             for elt in arguments:
                 mline = mline.replace(elt, arguments[elt])
             print(mline, end="")
-
+    print(
+        rpath,
+        scriptpath,
+        "Please make sure Rscript is in your PATH and pcalg is installed in R. Consider using mamba or conda to install r-pcalg.",
+    )
     if output_function is None:
         try:
             output = subprocess.call(
@@ -264,7 +268,7 @@ class LiNGAM(GraphModel):
         try:
             data.to_csv(run_dir / "data.csv", header=False, index=False)
             lingam_result = launch_R_script(
-                Path("/Users/xf2217/Repos/gcell/gcell/utils/lingam.r"),
+                Path("/home/xf2217/Projects/gcell/src/gcell/utils/lingam.r"),
                 self.arguments,
                 output_function=retrieve_result,
                 verbose=verbose,

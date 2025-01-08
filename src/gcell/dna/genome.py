@@ -404,7 +404,7 @@ class Genome:
                 print(f"Failed to download blacklist: {e}, using empty blacklist")
 
     def __repr__(self) -> str:
-        return f"Genome: {self.assembly} with fasta file: {self.fasta_file}"
+        return f"Genome: {self.assembly}"
 
     def normalize_chromosome(self, chromosome):
         """

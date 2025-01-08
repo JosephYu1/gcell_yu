@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 import requests
 
-from ..data import organism_to_uniprot
+from .data import organism_to_uniprot
 
 
 def get_string_network(

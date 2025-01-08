@@ -114,7 +114,7 @@ class Celltype:
         celltype: str,
         data_dir="../pretrain_human_bingren_shendure_apr2023",
         interpret_dir="Interpretation",
-        assets_dir="assets",
+        assets_dir="assets/",
         input: bool = False,
         jacob: bool = False,
         embed: bool = False,
@@ -879,7 +879,7 @@ class Celltype:
         r = r.query(f"Chromosome==@r.iloc[{self.focus}].Chromosome")
         r_motif = (
             pd.concat([j.data for j in js], axis=0)
-            .drop(["Chromosome", "Start", "End"], axis=1)
+            .drop(["Chromosome", "Start", "End", "Gene"], axis=1, errors="ignore")
             .groupby("index")
             .mean()
         )
@@ -1091,7 +1091,7 @@ class GETHydraCellType(Celltype):
         self.celltype_name = celltype
         self.zarr_path = zarr_path
         self.motif = NrMotifV1.load_from_pickle()
-        self.assets_dir = "assets"  # Default value, could be made configurable
+        self.assets_dir = "assets/"  # Default value, could be made configurable
         self.s3_file_sys = None  # Default value, could be made configurable
         self.prediction_target = prediction_target
         self._load_zarr_data()
@@ -1115,7 +1115,7 @@ class GETHydraCellType(Celltype):
         logging.info(f"Loading zarr data from {self.zarr_path}")
         self._zarr_data = zarr.open(self.zarr_path, mode="r")
         self.genelist = [
-            x.strip(" ") for x in self._zarr_data["avaliable_genes"][:].reshape(-1)
+            x.strip(" ") for x in self._zarr_data["available_genes"][:].reshape(-1)
         ]
 
     def _process_data(self):
@@ -1124,7 +1124,7 @@ class GETHydraCellType(Celltype):
 
         # Get all data upfront
         focus_idx = 100  # Since this was hardcoded in original code
-        avaliable_genes = self._zarr_data["avaliable_genes"][:].reshape(-1)
+        available_genes = self._zarr_data["available_genes"][:].reshape(-1)
         chromosome = self._zarr_data["chromosome"][:].flatten()
         strands = self._zarr_data["strand"][:].astype(int)
         peak_coord = self._zarr_data["peak_coord"][:]
@@ -1147,7 +1147,7 @@ class GETHydraCellType(Celltype):
         # Create DataFrame directly
         self.gene_annot = pd.DataFrame(
             {
-                "gene_name": [x.strip(" ") for x in avaliable_genes],
+                "gene_name": [x.strip(" ") for x in available_genes],
                 "Chromosome": [x.strip(" ") for x in chromosome],
                 "Start": peak_coord[:, focus_idx, 0].astype(int),
                 "End": peak_coord[:, focus_idx, 1].astype(int),
@@ -1174,9 +1174,11 @@ class GETHydraCellType(Celltype):
 
     def get_gene_strand(self, gene_name: str):
         """Get strand information for a gene."""
-        return self.gene_annot[self.gene_annot["gene_name"] == gene_name][
-            "Strand"
-        ].values[0]
+        v = self.gene_annot[self.gene_annot["gene_name"] == gene_name]["Strand"].values
+        if isinstance(v, np.ndarray):
+            return v[0]
+        else:
+            return v
 
     def get_gene_jacobian(self, gene_name: str, multiply_input=True):
         """Get jacobians for all TSS of a gene."""
@@ -1187,7 +1189,7 @@ class GETHydraCellType(Celltype):
         for i in indices:
             jacob = self._zarr_data["jacobians"][self.prediction_target][str(strand)][
                 "input"
-            ][i]
+            ]["region_motif"][i]
             input_data = self._zarr_data["input"][i]
 
             if multiply_input:
@@ -1247,7 +1249,7 @@ class GETHydraCellType(Celltype):
         if celltype is None:
             celltype = f"{cfg.dataset.leave_out_celltypes}"
         if zarr_path is None:
-            zarr_path = f"{cfg.machine.output_dir}/{cfg.run.project_name}/{cfg.run.run_name}/{cfg.run.run_name}.zarr"
+            zarr_path = f"{cfg.machine.output_dir}/{cfg.run.project_name}/{cfg.run.run_name}/{celltype}.zarr"
         logger.info(
             f"Creating GETHydraCellType instance for {celltype}, loading data from {zarr_path}"
         )
@@ -1310,12 +1312,25 @@ class GETHydraCellType(Celltype):
         )
         return self._gene_by_motif
 
-    def plot_gene_motifs(self, gene, motif, overwrite: bool = False):
+    def plot_gene_motifs(self, gene, motif, overwrite: bool = False, n=10):
         """
-        Override parent method to ensure compatibility with hydra cell type.
+        Plot top N motifs for a gene. Based on the absolute mean of the motif scores.
+
+        Parameters
+        ----------
+        gene : str
+            Gene name
+        motif : str
+            Motif name
+        overwrite : bool, optional
+            Whether to overwrite existing plots, by default False
+        n : int, optional
+            Number of motifs to plot, by default 10
         """
         r = self.get_gene_jacobian_summary(gene, "motif")
-        m = r.sort_values(ascending=False).head(10).index.values
+        m = r.sort_values(ascending=False).head(n).index.values
+        # remove 'Accessibility' from the list
+        m = [m_i for m_i in m if m_i != "Accessibility"]
         fig, ax = plt.subplots(2, 5, figsize=(10, 4), sharex=False, sharey=False)
 
         for i, m_i in enumerate(m):
@@ -1326,12 +1341,15 @@ class GETHydraCellType(Celltype):
                 )
                 or overwrite
             ):
-                self.motif.get_motif_cluster_by_name(m_i).seed_motif.plot_logo(
-                    filename=f'{self.assets_dir}{m_i.replace("/", "_")}.png',
-                    logo_title="",
-                    size="medium",
-                    ic_scale=True,
-                )
+                try:
+                    self.motif.get_motif_cluster_by_name(m_i).seed_motif.plot_logo(
+                        filename=f'{self.assets_dir}{m_i.replace("/", "_")}.png',
+                        logo_title="",
+                        size="medium",
+                        ic_scale=True,
+                    )
+                except Exception as e:
+                    print(f"Error plotting motif {m_i}: {str(e)}")
 
             if self.s3_file_sys:
                 with self.s3_file_sys.open(
