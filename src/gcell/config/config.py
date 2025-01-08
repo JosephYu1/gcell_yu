@@ -3,8 +3,7 @@ from typing import TypeVar
 
 import hydra
 from hydra.core.global_hydra import GlobalHydra
-from hydra_zen import MISSING
-from omegaconf import OmegaConf
+from omegaconf import MISSING, OmegaConf
 
 T = TypeVar("T")
 
