@@ -4,6 +4,17 @@
 
 `gcell` is a comprehensive toolkit for genomic data analysis, focusing on cell type-specific regulatory analysis, DNA sequence manipulation, protein structure prediction, and pathway analysis. It integrates various modules to facilitate the study of different aspects of gene expression regulation.
 
+# News
+- Feature: Now you can load pre-infered cell types on getdemo website easily:
+```python
+from gcell.cell.celltype import GETDemoLoader
+g = GETDemoLoader()
+print(g.available_celltypes) # this gives you a list of cell type names
+g.load_celltype('Plasma Cell')
+```
+- Fix: `zarr` has been limited to `<3.0.0` to avoid s3 problem
+
+
 ## Goal
 The long term goal of this package is to create a open-source, community-involved python-centric playground/tool-set for future AI Agent to discover new biology through predictive model.
 
