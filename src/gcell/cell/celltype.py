@@ -51,7 +51,7 @@ motif_clusters = motif.cluster_names
 
 # Load gencode_hg38 from feather file.
 # This is only used for backwards compatibility.
-gencode_hg38 = Gencode("hg38", version=44).gtf
+gencode_hg38 = Gencode("hg38", version=40, is_basic=False).gtf
 gencode_hg38["Strand"] = gencode_hg38["Strand"].apply(lambda x: 0 if x == "+" else 1)
 gene2strand = gencode_hg38.set_index("gene_name").Strand.to_dict()
 
@@ -753,6 +753,10 @@ class Celltype:
                 .rename(columns={"index": "level_0"})
             )
         gene_annot = gene_annot.explode("level_0").reset_index(drop=True)
+        print(gene_annot.shape)
+        print(self.genelist[:].shape)
+        if isinstance(self.genelist, zarr.core.Array):
+            self.genelist = self.genelist[:]
         gene_annot = gene_annot.iloc[self.genelist].reset_index(drop=True)
         return gene_annot
 

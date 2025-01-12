@@ -43,7 +43,9 @@ class Gencode(GTF):
             version=config.get("gencode_version"),
         )
 
-    def __init__(self, assembly="hg38", version=40, exclude_chrs=["chrM", "chrY"]):
+    def __init__(
+        self, assembly="hg38", version=40, is_basic=True, exclude_chrs=["chrM", "chrY"]
+    ):
         """Initialize the Gencode class.
 
         Parameters
@@ -57,6 +59,7 @@ class Gencode(GTF):
         """
         self.assembly = assembly
         self.version = version
+        self.is_basic = is_basic
         self.gtf_dir = Path(_settings.get_setting("annotation_dir"))
 
         # Download annotation if needed
@@ -95,6 +98,12 @@ class Gencode(GTF):
         elif self.assembly == "hg19":
             fname = f"gencode.v{str(self.version)}lift37.basic.annotation.gtf.gz"
             url = f"https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_{self.version}/GRCh37_mapping/{fname}"
+
+        if not self.is_basic:
+            # replace .basic with ''
+            fname = fname.replace(".basic", "")
+            url = url.replace(".basic", "")
+
         self.gtf_path = Path(_settings.get_setting("annotation_dir")) / fname
         if not self.gtf_path.exists():
             _settings.download_with_pooch(fname, url, target_dir="annotation_dir")
