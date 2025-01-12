@@ -363,8 +363,8 @@ class NrMotifV1(MotifClusterCollection):
         if annotations_file.exists():
             motif_annotations = pd.read_csv(annotations_file)
         else:
-            a = pd.read_excel(f"{base_url}motif_annotations.xlsx", sheet_name=1)
-            b = pd.read_excel(f"{base_url}motif_annotations.xlsx", sheet_name=0)
+            a = pd.read_excel(f"{base_url}/motif_annotations.xlsx", sheet_name=1)
+            b = pd.read_excel(f"{base_url}/motif_annotations.xlsx", sheet_name=0)
             motif_annotations = pd.merge(
                 a, b, left_on="Cluster_ID", right_on="Cluster_ID"
             )
