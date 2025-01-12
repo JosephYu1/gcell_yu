@@ -756,8 +756,6 @@ class Celltype:
                 .rename(columns={"index": "level_0"})
             )
         gene_annot = gene_annot.explode("level_0").reset_index(drop=True)
-        print(gene_annot.shape)
-        print(self.genelist[:].shape)
         if isinstance(self.genelist, zarr.core.Array):
             self.genelist = self.genelist[:]
         gene_annot = gene_annot.iloc[self.genelist].reset_index(drop=True)
@@ -1924,3 +1922,72 @@ def celltype_factory(celltype_class, cell_id, config, zarr_path=None, motif_path
         return GETHydraCellType(cell_id, config, zarr_path, motif_path)
     else:
         raise ValueError(f"Unknown celltype class: {celltype_class}")
+
+
+class GETDemoLoader:
+    def __init__(self):
+        import s3fs
+
+        from gcell.config.config import load_config
+
+        print("""
+This class will load pre-inferenced data from s3. The checkpoint is a binary atac get model trained on human fetal and adult data.
+Gencode v40 was used for gene annotation. The annotation file is stored in a feather file at zenodo: https://zenodo.org/records/14635090/files/gencode.v40.hg38.feather?download=1
+The data is stored in the s3 bucket: s3://2023-get-xf2217/get_demo/
+Note that not all celltypes have observed expression. In those cases, the observed expression is set to 0.
+You can use `available_celltypes` to see which celltypes are available, and `load_celltype` to load a celltype.
+              """)
+        self.cfg = load_config("s3_interpret")
+        self.s3_file_sys = s3fs.S3FileSystem(anon=True)
+        self.cfg.celltype.data_dir = (
+            f"{self.cfg.s3_uri}/pretrain_human_bingren_shendure_apr2023/fetal_adult/"
+        )
+        self.cfg.celltype.interpret_dir = (
+            f"{self.cfg.s3_uri}/Interpretation_all_hg38_allembed_v4_natac/"
+        )
+        self.cfg.celltype.motif_dir = (
+            f"{self.cfg.s3_uri}/interpret_natac/motif-clustering/"
+        )
+        self.cfg.celltype.assets_dir = f"{self.cfg.s3_uri}/assets/"
+        cell_type_annot = pd.read_csv(
+            self.cfg.celltype.data_dir.split("fetal_adult")[0]
+            + "data/cell_type_pretrain_human_bingren_shendure_apr2023.txt"
+        )
+        self.cell_type_id_to_name = dict(
+            zip(cell_type_annot["id"], cell_type_annot["celltype"])
+        )
+        self.cell_type_name_to_id = dict(
+            zip(cell_type_annot["celltype"], cell_type_annot["id"])
+        )
+        self.available_celltypes = sorted(
+            [
+                self.cell_type_id_to_name[f.split("/")[-1]]
+                for f in self.s3_file_sys.glob(self.cfg.celltype.interpret_dir + "*")
+            ]
+        )
+
+    def load_celltype(self, celltype_name, jacob=False, embed=False):
+        """
+        Load a celltype from the demo dataset.
+
+        Parameters
+        ----------
+        celltype_name
+            The name of the celltype to load.
+        jacob
+            Whether to load the Jacobian data.
+        embed
+            Whether to load the embedding data.
+
+        Returns
+        -------
+        GETCellType
+            The celltype instance.
+        """
+        celltype_id = self.cell_type_name_to_id[celltype_name]
+        if jacob:
+            self.cfg.celltype.jacob = True
+        if embed:
+            self.cfg.celltype.embed = True
+        cell = GETCellType(celltype_id, self.cfg, s3_file_sys=self.s3_file_sys)
+        return cell
