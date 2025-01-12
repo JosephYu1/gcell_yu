@@ -50,7 +50,7 @@ dependencies = [
     "seqlogo",
     "tqdm",
     "xmlschema",
-    "zarr",
+    "zarr<3",
     "nglview",
     "py3Dmol",
 ]
