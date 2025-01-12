@@ -34,9 +34,11 @@ Example
 
 import os
 import pickle
+import tarfile
 from pathlib import Path
 
 import pandas as pd
+import requests
 from pandas import DataFrame
 
 from .._settings import get_setting
@@ -316,7 +318,7 @@ class NrMotifV1(MotifClusterCollection):
     def get_motif_data(
         self,
         motif_dir: str | Path = annotation_dir / "nr_motif_v1",
-        base_url: str = "https://resources.altius.org/~jvierstra/projects/motif-clustering/releases/v1.0",
+        base_url: str = "https://zenodo.org/record/14635057/files/nr_motif_v1.tar?download=1",
     ) -> DataFrame:
         """
         Download and load motif data from the specified source.
@@ -335,29 +337,25 @@ class NrMotifV1(MotifClusterCollection):
 
         Notes
         -----
-        Downloads PFM files if not present locally. Combines motif annotations from multiple sources.
+        Downloads and extracts a tar file if not present locally. Combines motif annotations from multiple sources.
         """
         pfm_dir = motif_dir / "pfm"
         if pfm_dir.exists() and pfm_dir.is_dir() and len(os.listdir(pfm_dir)) > 0:
             pass
         else:
-            pfm_dir.mkdir(parents=True, exist_ok=True)
-            print("Downloading PFMs...")
-            import subprocess
+            tar_path = annotation_dir / "nr_motif_v1.tar"
 
-            subprocess.run(
-                [
-                    "wget",
-                    "--recursive",
-                    "--no-parent",
-                    "--cut-dirs=6",
-                    "-nH",
-                    "-P",
-                    ".",
-                    f"{base_url}/pfm/",
-                ],
-                cwd=str(pfm_dir),
-            )
+            # Download the tar file
+            print("Downloading motif data...")
+            response = requests.get(base_url, stream=True)
+            with Path(tar_path).open("wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+
+            # Extract the tar file
+            print("Extracting motif data...")
+            with tarfile.open(tar_path, "r") as tar:
+                tar.extractall(path=annotation_dir)
 
         annotations_file = motif_dir / "motif_annotations.csv"
         if annotations_file.exists():

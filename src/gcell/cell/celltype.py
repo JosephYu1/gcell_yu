@@ -35,7 +35,6 @@ from tqdm import tqdm
 
 from .._logging import get_logger
 from ..dna.nr_motif_v1 import NrMotifV1
-from ..rna.gencode import Gencode
 from ..rna.gene import TSS
 from ..utils.causal_lib import get_subnet, plotly_networkx_digraph, preprocess_net
 from ..utils.lingam import LiNGAM
@@ -48,12 +47,6 @@ from ..utils.s3 import (
 
 motif = NrMotifV1.load_from_pickle()
 motif_clusters = motif.cluster_names
-
-# Load gencode_hg38 from feather file.
-# This is only used for backwards compatibility.
-gencode_hg38 = Gencode("hg38", version=40, is_basic=False).gtf
-gencode_hg38["Strand"] = gencode_hg38["Strand"].apply(lambda x: 0 if x == "+" else 1)
-gene2strand = gencode_hg38.set_index("gene_name").Strand.to_dict()
 
 # Add logger configuration
 logger = get_logger(__name__)
@@ -534,6 +527,15 @@ class Celltype:
         self.interpret_cell_dir = Path(self.interpret_dir) / celltype / "allgenes"
         print("loading from interpretation dir", self.interpret_cell_dir)
         self.gene_feather_path = f"{self.data_dir}{celltype}.exp.feather"
+        # Load gencode_hg38 from feather file.
+        # This is only used for backwards compatibility.
+        self.gencode_hg38 = pd.read_feather(
+            "https://zenodo.org/records/14635090/files/gencode.v40.hg38.feather?download=1"
+        )
+        self.gencode_hg38["Strand"] = self.gencode_hg38["Strand"].apply(
+            lambda x: 0 if x == "+" else 1
+        )
+        self.gene2strand = self.gencode_hg38.set_index("gene_name").Strand.to_dict()
         if path_exists_with_s3(
             self.interpret_cell_dir / f"{self.celltype}.zarr",
             s3_file_sys=self.s3_file_sys,
@@ -574,8 +576,9 @@ class Celltype:
                 self.data_dir + celltype + ".watac.npz", s3_file_sys=self.s3_file_sys
             )
             self.tss_accessibility = self.input[:, self.num_features - 1]
+
         self.gene_annot["Strand"] = self.gene_annot["gene_name"].apply(
-            lambda x: gene2strand.get(x, 0)
+            lambda x: self.gene2strand.get(x, 0)
         )
         self.tss_strand = self.gene_annot.Strand.astype(int).values
         self.tss_start = self.peak_annot.iloc[tss_idx].Start.values
@@ -727,10 +730,10 @@ class Celltype:
             atac = pr(self.peak_annot, int64=True)
             # join the ATAC-seq data with the RNA-seq data
             exp = atac.join(
-                pr(gencode_hg38, int64=True).extend(300), how="left"
+                pr(self.gencode_hg38, int64=True).extend(300), how="left"
             ).as_df()
-            gene2strand["-1"] = -1
-            exp["Strand"] = exp["gene_name"].apply(lambda x: gene2strand[x])
+            self.gene2strand["-1"] = -1
+            exp["Strand"] = exp["gene_name"].apply(lambda x: self.gene2strand[x])
             if self.s3_file_sys is None:
                 exp.reset_index(drop=True).to_feather(
                     f"{self.data_dir}{self.celltype}.exp.feather"
@@ -1529,6 +1532,7 @@ class GETCellType(Celltype):
 
         """
         features = config.celltype.features
+
         if features == "NrMotifV1":
             features = np.array(motif_clusters + ["Accessibility"])
         num_region_per_sample = config.celltype.num_region_per_sample
