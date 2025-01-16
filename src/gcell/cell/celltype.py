@@ -338,6 +338,7 @@ class GeneByMotif:
 
         # Calculate causal data if not found
         data = zscore(self.data, axis=0)
+        data = pd.DataFrame(data, columns=self.data.columns, index=self.data.index)
         zarr_data = load_zarr_with_s3(zarr_path, mode="a", s3_file_sys=self.s3_file_sys)
 
         # Calculate permutations in parallel
