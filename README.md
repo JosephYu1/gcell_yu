@@ -5,6 +5,7 @@
 `gcell` is a comprehensive toolkit for genomic data analysis, focusing on cell type-specific regulatory analysis, DNA sequence manipulation, protein structure prediction, and pathway analysis. It integrates various modules to facilitate the study of different aspects of gene expression regulation.
 
 # News
+- I dropped `graphviz` and `pygraphviz` dependency due to complexity of maintain installing across different platform. It only affects the network layout for drawing causal graph. `nx.spring_layout(G)` is used instead of `nx.nx_agraph.graphviz_layout(G)` now, which is uglier unforturnately.
 - Feature: Now you can load pre-infered cell types on getdemo website easily:
 ```python
 from gcell.cell.celltype import GETDemoLoader

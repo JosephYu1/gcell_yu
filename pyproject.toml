@@ -42,7 +42,6 @@ dependencies = [
     "pyarrow",
     "pyBigWig",
     "pyfaidx",
-    "pygraphviz",
     "pyranges",
     "requests",
     "s3fs",
