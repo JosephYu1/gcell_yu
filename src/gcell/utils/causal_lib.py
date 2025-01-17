@@ -118,9 +118,10 @@ def plot_comm(G, figsize=(10, 10), title="Network structure", savefig=False):
 
     weights = [np.absolute(G[u][v]["weight"]) for u, v in G.edges]
     # external edges
+    pos = nx.spring_layout(G)
     nx.draw(
         G,
-        pos=nx.spring_layout(G),
+        pos=pos,
         node_size=0,
         edgelist=external,
         width=weights,
@@ -132,7 +133,7 @@ def plot_comm(G, figsize=(10, 10), title="Network structure", savefig=False):
     # internal edges
     nx.draw(
         G,
-        pos=nx.spring_layout(G),
+        pos=pos,
         node_size=100,
         edgelist=internal,
         ax=ax,
