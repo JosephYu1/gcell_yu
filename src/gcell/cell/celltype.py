@@ -1808,11 +1808,18 @@ class GETHydraCellType(Celltype):
         """
         if "gene_by_motif" in self._zarr_data and not overwrite:
             gene_by_motif_values = self._zarr_data["gene_by_motif"][:]
-            gene_by_motif_df = pd.DataFrame(
-                gene_by_motif_values,
-                index=self.gene_annot["gene_name"].unique(),
-                columns=self.features,
-            )
+            if gene_by_motif_values.shape[0] == len(self.gene_annot):
+                gene_by_motif_df = pd.DataFrame(
+                    gene_by_motif_values,
+                    index=self.gene_annot["gene_name"].values,
+                    columns=self.features,
+                )
+            else:
+                gene_by_motif_df = pd.DataFrame(
+                    gene_by_motif_values,
+                    index=self.gene_annot["gene_name"].unique(),
+                    columns=self.features,
+                )
         else:
             all_genes = self.gene_annot["gene_name"].unique()
             motif_data = []
