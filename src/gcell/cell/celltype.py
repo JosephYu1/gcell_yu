@@ -52,6 +52,78 @@ motif_clusters = motif.cluster_names
 logger = get_logger(__name__)
 
 
+def process_chunk(zarr_path, jacobian_group, chunk_idxs):
+    """
+    Process a subset of gene indices (chunk), computing the motif summary.
+    Returns the computed chunk as a NumPy array.
+    """
+    z_local = zarr.open(zarr_path, mode="r")
+    strand_local = z_local["strand"][:]
+    jac0_local = z_local["jacobians"][jacobian_group]["0"]["input"]["region_motif"]
+    jac1_local = z_local["jacobians"][jacobian_group]["1"]["input"]["region_motif"]
+    input_local = z_local["input"]
+
+    results = np.zeros((len(chunk_idxs), jac0_local.shape[2]), dtype=np.float32)
+
+    for idx, i in enumerate(chunk_idxs):
+        s = strand_local[i]
+        jac = jac0_local[i] if s == 0 else jac1_local[i]
+        inp = input_local[i]  # shape: (200, 283)
+        results[idx] = (jac * inp).mean(axis=0)
+
+    return chunk_idxs, results
+
+
+def parallel_get_gene_by_motif(
+    zarr_path: str,
+    jacobian_group: str = "exp",
+    overwrite: bool = True,
+    max_workers: int = None,
+    chunk_size: int = 64,
+):
+    """
+    Given a GETHydraCellType zarr file, compute a gene-by-motif in parallel,
+    storing the result in a 'gene_by_motif' dataset in the same Zarr store after collecting results.
+    Each open tss of a gene is included in the gene_by_motif, so the shape
+    of the output is (celltype.gene_annot.shape[0], n_features).
+    """
+    z = zarr.open(zarr_path, mode="a")
+
+    if "gene_by_motif" in z and not overwrite:
+        print("gene_by_motif already exists and overwrite=False. Doing nothing.")
+        return
+
+    n_genes = z["available_genes"].shape[0]
+    n_features = z["input"].shape[2]
+
+    # Prepare the output dataset
+    if "gene_by_motif" in z:
+        del z["gene_by_motif"]
+    out_ds = z.create_dataset(
+        "gene_by_motif", shape=(n_genes, n_features), dtype=np.float32, overwrite=True
+    )
+
+    gene_indices = np.arange(n_genes)
+    results = np.zeros((n_genes, n_features), dtype=np.float32)
+
+    futures = []
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        for start in range(0, n_genes, chunk_size):
+            end = min(start + chunk_size, n_genes)
+            chunk_inds = gene_indices[start:end]
+            futures.append(
+                executor.submit(process_chunk, zarr_path, jacobian_group, chunk_inds)
+            )
+
+        for f in tqdm(futures, desc="Computing gene_by_motif"):
+            chunk_idxs, chunk_results = f.result()
+            results[chunk_idxs, :] = chunk_results
+
+    # Write the results to Zarr after all chunks are processed
+    out_ds[:, :] = results
+    print("Done. 'gene_by_motif' array has shape:", out_ds.shape)
+
+
 class OneTSSJacobian:
     """Jacobian data for one TSS.
 
