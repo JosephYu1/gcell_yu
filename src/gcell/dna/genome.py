@@ -407,7 +407,7 @@ class Genome:
             downloaded_file = _settings.POOCH.fetch(fname)
 
             # Move to final location
-            Path(downloaded_file).rename(self.chrom_sizes_file)
+            Path(downloaded_file).rename(chrom_sizes_file)
 
         chrom_gap_file = str(
             Path(_settings.get_setting("annotation_dir")) / f"{self.assembly}.agp.gz"
