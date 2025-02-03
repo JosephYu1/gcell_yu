@@ -64,7 +64,9 @@ class ChromSize:
         Create tiled regions across chromosomes
     """
 
-    def __init__(self, assembly=None, annotation_dir=None):
+    def __init__(
+        self, assembly=None, annotation_dir=_settings.get_setting("annotation_dir")
+    ):
         self.assembly = assembly
         self.annotation_dir = Path(annotation_dir) if annotation_dir else None
         if self.assembly is None:
@@ -178,7 +180,7 @@ class ChromSize:
             DataFrame of tiled regions
         """
         pr_regions = self.as_pyranges()
-        return pr_regions.tile(size=tile_size, overlap=tile_overlap).as_df()
+        return pr_regions.tile(tile_size=tile_size, overlap=tile_overlap).as_df()
 
 
 class ChromGap:
@@ -206,7 +208,9 @@ class ChromGap:
         Save AGP data to file
     """
 
-    def __init__(self, assembly=None, annotation_dir=None):
+    def __init__(
+        self, assembly=None, annotation_dir=_settings.get_setting("annotation_dir")
+    ):
         self.assembly = assembly
         self.annotation_dir = Path(annotation_dir) if annotation_dir else None
 

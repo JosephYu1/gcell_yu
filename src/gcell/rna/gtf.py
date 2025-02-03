@@ -61,6 +61,7 @@ class GTF:
                 "gene_name",
                 "gene_id",
                 "gene_type",
+                "transcript_id",
             ]
         ]
         negative = gtf_df[(gtf_df.Feature == "transcript") & (gtf_df.Strand == "-")][
@@ -72,6 +73,7 @@ class GTF:
                 "gene_name",
                 "gene_id",
                 "gene_type",
+                "transcript_id",
             ]
         ]
 
@@ -83,6 +85,7 @@ class GTF:
             "gene_name",
             "gene_id",
             "gene_type",
+            "transcript_id",
         ]
         positive.columns = columns
         negative.columns = columns
