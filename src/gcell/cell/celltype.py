@@ -1690,24 +1690,34 @@ class GETHydraCellType(Celltype):
         chromosome = self._zarr_data["chromosome"][:].flatten()
         # strip whitespace from chromosome
         chromosome = np.array([x.strip(" ") for x in chromosome])
-        strands = self._zarr_data["strand"][:].astype(int)
         peak_coord = self._zarr_data["peak_coord"][:]
         input_data = self._zarr_data["input"][:]
+        if self.prediction_target == "exp":
+            strands = self._zarr_data["strand"][:].astype(int)
 
-        # Get predictions and observations for all genes at once
-        pred_values = np.array(
-            [
-                self._zarr_data["preds"][self.prediction_target][i, focus_idx, strand]
-                for i, strand in enumerate(strands)
-            ]
-        )
-        obs_values = np.array(
-            [
-                self._zarr_data["obs"][self.prediction_target][i, focus_idx, strand]
-                for i, strand in enumerate(strands)
-            ]
-        )
-
+            # Get predictions and observations for all genes at once
+            pred_values = np.array(
+                [
+                    self._zarr_data["preds"][self.prediction_target][
+                        i, focus_idx, strand
+                    ]
+                    for i, strand in enumerate(strands)
+                ]
+            )
+            obs_values = np.array(
+                [
+                    self._zarr_data["obs"][self.prediction_target][i, focus_idx, strand]
+                    for i, strand in enumerate(strands)
+                ]
+            )
+        else:
+            pred_values = self._zarr_data["preds"][self.prediction_target][
+                :, focus_idx, :
+            ].flatten()
+            obs_values = self._zarr_data["obs"][self.prediction_target][
+                :, focus_idx, :
+            ].flatten()
+            strands = np.zeros(len(pred_values))
         # Create DataFrame directly
         self.gene_annot = pd.DataFrame(
             {
@@ -1785,7 +1795,8 @@ class GETHydraCellType(Celltype):
         """
         indices = self.get_gene_idx(gene_name)
         strand = self.get_gene_strand(gene_name)
-
+        if self.prediction_target != "exp":
+            strand = 0
         jacobians = []
         for i in indices:
             jacob = self._zarr_data["jacobians"][self.prediction_target][str(strand)][
