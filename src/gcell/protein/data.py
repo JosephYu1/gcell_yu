@@ -180,9 +180,7 @@ class ProteinData:
 
     def _initialize_schema(self):
         """Initialize UniProt XML schema"""
-        self._schema = xmlschema.XMLSchema(
-            "https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot.xsd"
-        )
+        self._schema = xmlschema.XMLSchema("http://www.uniprot.org/docs/uniprot.xsd")
 
     def _initialize_seq(self):
         """
