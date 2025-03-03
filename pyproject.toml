@@ -4,6 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "gcell"
+version = "0.1.0"
 description = "A Python library that represents different entities in a cell"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -54,7 +55,7 @@ dependencies = [
     "nglview",
     "py3Dmol",
 ]
-dynamic = ["version"]
+# dynamic = ["version"]
 
 [project.urls]
 Homepage = "https://github.com/fuxialexander/gcell"
