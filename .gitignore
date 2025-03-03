@@ -25,7 +25,6 @@
 
 # Python build files
 __pycache__/
-/src/getcell/_version.py
 /ci/getcell-min-deps.txt
 /dist/
 /*-env/
